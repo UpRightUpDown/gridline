@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gridline Graphing Calculator</title>
+  <link rel="icon" href="assets/logo.svg">
+  <link rel="stylesheet" href="vendor/mathquill.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Gridline">
+      <img class="brand-logo" src="assets/logo.svg" alt="" height="22">
+      <span class="wordmark">gridline</span>
+    </a>
+    <span class="topbar-sep"></span>
+    <span class="topbar-title">Graphing Calculator</span>
+    <span class="topbar-sep sub-sep hidden"></span>
+    <span class="topbar-subtitle hidden"></span>
+    <div class="topbar-center-group hidden">
+      <img class="topbar-center hidden" alt="">
+      <span class="topbar-center-text hidden"></span>
+    </div>
+  </header>
+
+  <main class="app">
+    <section class="exp-panel" id="exp-panel">
+      <div class="exp-toolbar">
+        <button class="tb-btn" id="btn-add" title="Add item" aria-label="Add item"><span class="i-plus"></span></button>
+        <div class="popover add-menu" id="add-menu">
+          <button data-add="expression"><span class="am-icon"><i>f</i>(<i>x</i>)</span> expression</button>
+          <button data-add="note"><span class="am-icon">“</span> note</button>
+          <button data-add="table"><span class="am-icon am-table"></span> table</button>
+        </div>
+        <div class="tb-mid">
+          <button class="tb-btn" id="btn-undo" title="Undo (Ctrl+Z)" aria-label="Undo"><span class="i-undo"></span></button>
+          <button class="tb-btn" id="btn-redo" title="Redo (Ctrl+Y)" aria-label="Redo"><span class="i-redo"></span></button>
+        </div>
+        <button class="tb-btn" id="btn-edit" title="Edit list" aria-label="Edit list"><span class="i-gear"></span></button>
+        <button class="tb-btn" id="btn-collapse" title="Hide list" aria-label="Hide list"><span class="i-chev-l"></span></button>
+        <div class="edit-bar">
+          <button class="eb-delete" id="btn-delete-all">Delete All</button>
+          <button class="eb-done" id="btn-edit-done">Done</button>
+        </div>
+      </div>
+      <div class="exp-list" id="exp-list"></div>
+      <div class="exp-footer">
+        <button class="kp-toggle" id="btn-keypad" title="Show keypad" aria-label="Show keypad"><span class="i-keyboard"></span><span class="i-caret-up"></span></button>
+        <span class="powered">powered by <b class="powered-name">gridline</b></span>
+      </div>
+    </section>
+    <div class="resizer" id="resizer"></div>
+
+    <section class="graph-area">
+      <div id="graph" class="graph"></div>
+      <button class="expand-btn" id="btn-expand" title="Show list" aria-label="Show list"><span class="i-chev-r"></span></button>
+      <div class="graph-controls">
+        <button class="gc-btn" id="btn-settings" title="Graph settings" aria-label="Graph settings"><span class="i-wrench"></span></button>
+        <div class="gc-group">
+          <button class="gc-btn" id="btn-zoom-in" title="Zoom in" aria-label="Zoom in"><span class="i-plus"></span></button>
+          <button class="gc-btn" id="btn-zoom-out" title="Zoom out" aria-label="Zoom out"><span class="i-minus"></span></button>
+        </div>
+        <button class="gc-btn hidden" id="btn-home" title="Default viewport" aria-label="Default viewport"><span class="i-home"></span></button>
+      </div>
+      <div class="popover settings-pop" id="settings-pop">
+        <div class="sp-row">
+          <div class="seg">
+            <button data-size="normal">A</button><button data-size="large" class="big">A</button>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" data-s="reverseContrast"> Reverse contrast</label>
+        <div class="sp-sep"></div>
+        <div class="sp-grid">
+          <div>
+            <label class="check"><input type="checkbox" data-s="grid"> Grid</label>
+            <label class="check"><input type="checkbox" data-s="arrows"> Arrows</label>
+          </div>
+          <div>
+            <label class="check small"><input type="checkbox" data-s="axisNumbers"> Axis Numbers</label>
+            <label class="check small"><input type="checkbox" data-s="minorGrid"> Minor Gridlines</label>
+          </div>
+        </div>
+        <div class="sp-sep"></div>
+        <div class="sp-row">
+          <label class="check"><input type="checkbox" data-s="xAxis"> X-Axis</label>
+          <input class="sp-label" data-label="xLabel" placeholder="Label, e.g. “x”">
+        </div>
+        <div class="sp-bounds">
+          <input data-b="xmin"> <span>≤ <i>x</i> ≤</span> <input data-b="xmax">
+        </div>
+        <div class="sp-row">
+          <label class="check"><input type="checkbox" data-s="yAxis"> Y-Axis</label>
+          <input class="sp-label" data-label="yLabel" placeholder="Label, e.g. “y”">
+        </div>
+        <div class="sp-bounds">
+          <input data-b="ymin"> <span>≤ <i>y</i> ≤</span> <input data-b="ymax">
+        </div>
+        <div class="sp-sep"></div>
+        <div class="sp-row">
+          <div class="seg">
+            <button data-angle="rad">Radians</button><button data-angle="deg">Degrees</button>
+          </div>
+        </div>
+        <div class="sp-row">
+          <button class="sp-btn" id="btn-square">Zoom Square</button>
+          <button class="sp-btn" id="btn-screenshot">Save Image</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="keypad" id="keypad">
+    <div class="kp-inner">
+      <div class="kp-main">
+        <div class="kp-block kp-left">
+          <button data-k="x"><i>x</i></button><button data-k="y"><i>y</i></button><button data-k="sq"><i>a</i><sup>2</sup></button><button data-k="pow"><i>a</i><sup><i>b</i></sup></button>
+          <button data-k="(">(</button><button data-k=")">)</button><button data-k="&lt;">&lt;</button><button data-k="&gt;">&gt;</button>
+          <button data-k="abs">|<i>a</i>|</button><button data-k=",">,</button><button data-k="le">≤</button><button data-k="ge">≥</button>
+          <button data-k="abc" class="kp-dark">ABC</button><button data-k="frac" class="kp-frac kp-gray" title="Fraction"><span><i>a</i></span><span><i>b</i></span></button><button data-k="sqrt" class="kp-sqrt">√</button><button data-k="pi">π</button>
+        </div>
+        <div class="kp-block kp-nums">
+          <button data-k="7" class="kp-num">7</button><button data-k="8" class="kp-num">8</button><button data-k="9" class="kp-num">9</button><button data-k="/">÷</button>
+          <button data-k="4" class="kp-num">4</button><button data-k="5" class="kp-num">5</button><button data-k="6" class="kp-num">6</button><button data-k="times">×</button>
+          <button data-k="1" class="kp-num">1</button><button data-k="2" class="kp-num">2</button><button data-k="3" class="kp-num">3</button><button data-k="-">−</button>
+          <button data-k="0" class="kp-num">0</button><button data-k="." class="kp-num">.</button><button data-k="=">=</button><button data-k="+">+</button>
+        </div>
+        <div class="kp-block kp-right">
+          <button data-k="funcs" class="kp-wide kp-gray">functions</button>
+          <button data-k="left" class="kp-gray"><span class="i-arrow-l"></span></button><button data-k="right" class="kp-gray"><span class="i-arrow-r"></span></button>
+          <button data-k="back" class="kp-wide kp-gray"><span class="i-back"></span></button>
+          <button data-k="enter" class="kp-wide kp-enter"><span class="i-enter"></span></button>
+        </div>
+      </div>
+      <div class="kp-abc abc-keys">
+        <div class="abc-row"><button data-k="q">q</button><button data-k="w">w</button><button data-k="e">e</button><button data-k="r">r</button><button data-k="t">t</button><button data-k="y">y</button><button data-k="u">u</button><button data-k="i">i</button><button data-k="o">o</button><button data-k="p">p</button></div>
+        <div class="abc-row"><button data-k="a">a</button><button data-k="s">s</button><button data-k="d">d</button><button data-k="f">f</button><button data-k="g">g</button><button data-k="h">h</button><button data-k="j">j</button><button data-k="k">k</button><button data-k="l">l</button><button data-k="theta">θ</button></div>
+        <div class="abc-row"><button data-k="sub" class="kp-dark"><i>a</i><sub><i>b</i></sub></button><button data-k="z">z</button><button data-k="x">x</button><button data-k="c">c</button><button data-k="v">v</button><button data-k="b">b</button><button data-k="n">n</button><button data-k="m">m</button><button data-k="back" class="kp-dark"><span class="i-back"></span></button></div>
+        <div class="abc-row"><button data-k="abc" class="kp-dark kp-wide">123</button><button data-k="sim">~</button><button data-k="!">!</button><button data-k="[">[</button><button data-k="]">]</button><button data-k="{">{</button><button data-k=":">:</button><button data-k="enter" class="kp-enter kp-wide"><span class="i-enter"></span></button></div>
+      </div>
+      <button class="kp-close" id="btn-keypad-close" title="Hide keypad" aria-label="Hide keypad"><span class="i-keyboard"></span><span class="i-caret-down"></span></button>
+      <div class="popover func-pop" id="func-pop">
+        <div class="fp-h">TRIG FUNCTIONS</div>
+        <div class="fp-grid">
+          <button data-k="fn:sin">sin</button><button data-k="fn:cos">cos</button><button data-k="fn:tan">tan</button>
+          <button data-k="fn:csc">csc</button><button data-k="fn:sec">sec</button><button data-k="fn:cot">cot</button>
+        </div>
+        <div class="fp-h">INVERSE TRIG FUNCTIONS</div>
+        <div class="fp-grid">
+          <button data-k="fn:arcsin">sin<sup>−1</sup></button><button data-k="fn:arccos">cos<sup>−1</sup></button><button data-k="fn:arctan">tan<sup>−1</sup></button>
+          <button data-k="fn:arccsc">csc<sup>−1</sup></button><button data-k="fn:arcsec">sec<sup>−1</sup></button><button data-k="fn:arccot">cot<sup>−1</sup></button>
+        </div>
+        <div class="fp-h">STATISTICS</div>
+        <div class="fp-grid">
+          <button data-k="fn:mean">mean</button><button data-k="fn:median">median</button><button data-k="fn:min">min</button>
+          <button data-k="fn:max">max</button><button data-k="fn:stdev">stdev</button><button data-k="fn:total">total</button>
+          <button data-k="fn:length">length</button><button data-k="fn:var">var</button><button data-k="sim">~</button>
+        </div>
+        <div class="fp-h">NUMBER THEORY</div>
+        <div class="fp-grid">
+          <button data-k="abs">|<i>a</i>|</button><button data-k="fn:round">round</button><button data-k="fn:floor">floor</button>
+          <button data-k="fn:ceil">ceil</button><button data-k="fn:mod">mod</button><button data-k="fact">!</button>
+          <button data-k="fn:gcd">gcd</button><button data-k="fn:lcm">lcm</button><button data-k="nthroot"><sup>n</sup>√</button>
+          <button data-k="fn:nCr">nCr</button><button data-k="fn:nPr">nPr</button><button data-k="fn:sign">sign</button>
+        </div>
+        <div class="fp-h">LOGARITHMS</div>
+        <div class="fp-grid">
+          <button data-k="fn:ln">ln</button><button data-k="fn:log">log</button><button data-k="logb">log<sub>a</sub></button>
+          <button data-k="ex"><i>e</i><sup>x</sup></button><button data-k="tenx">10<sup>x</sup></button><button data-k="fn:exp">exp</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="vendor/jquery.min.js"></script>
+  <script src="vendor/mathquill.min.js"></script>
+  <script src="js/math.js"></script>
+  <script src="js/program.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/branding.js"></script>
+</body>
+</html>
