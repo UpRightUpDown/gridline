@@ -29,3 +29,22 @@ test('ask passes on the error the server gives', async () => {
   const broken = async () => { throw new TypeError('Failed to fetch'); };
   await assert.rejects(A.ask('q', [], broken), /could not reach Claude/i);
 });
+
+test('ask sends hand-drawn strokes as rounded, thinned point lists', async () => {
+  const f = fakeFetch(200, { steps: [{ type: 'expression', content: 'a=1' }] });
+  const long = Array.from({ length: 500 }, (_, i) => [i / 100, Math.sin(i / 100)]);
+  await A.ask('what is this', [], f, [[[0.123456, -2.987654], [1, 2]], [[5, 5]], long]);
+  const body = JSON.parse(f.calls[0].opts.body);
+  assert.deepStrictEqual(body.sketches[0], [[0.1235, -2.988], [1, 2]]);
+  assert.strictEqual(body.sketches.length, 2, 'a single-point stroke is dropped');
+  const thin = body.sketches[1];
+  assert.ok(thin.length <= A.MAX_SKETCH_POINTS);
+  assert.deepStrictEqual(thin[0], [0, 0]);
+  assert.deepStrictEqual(thin.at(-1), [4.99, Number(Math.sin(4.99).toPrecision(4))], 'the stroke keeps its end');
+});
+
+test('ask leaves sketches out when nothing was drawn', async () => {
+  const f = fakeFetch(200, { steps: [{ type: 'expression', content: 'a=1' }] });
+  await A.ask('q', [], f, []);
+  assert.strictEqual(JSON.parse(f.calls[0].opts.body).sketches, undefined);
+});

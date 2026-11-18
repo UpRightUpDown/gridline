@@ -5,6 +5,23 @@
   const ASK_URL = 'https://gridline-claude.uprightupdown.workers.dev/ask';
   const MAX_STEPS = 40;
   const MAX_LEN = 2000;
+  const MAX_SKETCHES = 10;
+  const MAX_SKETCH_POINTS = 80;
+
+  // Hand-drawn strokes as [[x, y], ...] in graph coordinates: rounded, and thinned to at most
+  // MAX_SKETCH_POINTS evenly spaced points that keep both ends. Strokes under two points are dropped.
+  function cleanSketches(strokes) {
+    if (!Array.isArray(strokes)) return [];
+    const round = v => Number(v.toPrecision(4));
+    return strokes
+      .map(s => Array.isArray(s) ? s.filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) : [])
+      .filter(s => s.length >= 2)
+      .slice(-MAX_SKETCHES)
+      .map(s => {
+        const n = Math.min(s.length, MAX_SKETCH_POINTS);
+        return Array.from({ length: n }, (_, i) => s[Math.round(i * (s.length - 1) / (n - 1))]).map(p => [round(p[0]), round(p[1])]);
+      });
+  }
 
   // Keep only rows the expression list can show.
   function cleanSteps(steps) {
@@ -16,11 +33,14 @@
       .slice(0, MAX_STEPS);
   }
 
-  async function ask(question, context, fetchImpl) {
+  async function ask(question, context, fetchImpl, sketches) {
     const doFetch = fetchImpl || root.fetch.bind(root);
+    const body = { question, context };
+    const drawn = cleanSketches(sketches);
+    if (drawn.length) body.sketches = drawn;
     let res, data = {};
     try {
-      res = await doFetch(ASK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, context }) });
+      res = await doFetch(ASK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     } catch (e) {
       throw new Error('Could not reach Claude. Check the connection and try again.');
     }
@@ -31,7 +51,7 @@
     return steps;
   }
 
-  const api = { ASK_URL, ask, cleanSteps };
+  const api = { ASK_URL, MAX_SKETCH_POINTS, ask, cleanSteps, cleanSketches };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GAsk = api;
 })(typeof window !== 'undefined' ? window : globalThis);

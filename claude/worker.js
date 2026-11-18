@@ -11,6 +11,7 @@ const CORS = {
 };
 const MAX_QUESTION = 5000;
 const MAX_CONTEXT = 20000;
+const MAX_SKETCH = 30000; // characters of hand-drawn strokes in the request body
 const DEADLINE_MS = 150000;
 
 export const SYSTEM = String.raw`You answer questions inside Gridline, a Desmos-style graphing calculator. Your answer appears as rows in its expression list, in order, right under the question. Work the problem out step by step, one row per step.
@@ -25,6 +26,8 @@ Rules:
 - Let the maths speak for itself. Show the working as expression rows, so a person can see each step and its graph. Do not add a note that restates, announces or labels what an expression row already makes clear (no "First, define f", "Now take the derivative", "This is the answer"). End with the final answer as an expression row.
 - Keep it to at most 12 rows.
 - If the question is not about maths, answer it in notes.
+
+The person may have hand-drawn strokes on the graph. They come as lists of (x, y) points in graph coordinates, in drawing order. Read them as a sketch: the shape of a curve, a region, a point or an arrow the question refers to. When the question asks what a drawing is, fit it with the simplest expression that matches its shape.
 
 The question may have been typed into a maths field, so words can run together without spaces and may appear as LaTeX.`;
 
@@ -55,14 +58,20 @@ export async function handle(request, client) {
   if (request.method !== 'POST') return reply('Method not allowed', 405);
 
   const text = await request.text();
-  if (text.length > MAX_QUESTION + MAX_CONTEXT) return json({ error: 'That question is too long.' }, 413);
+  if (text.length > MAX_QUESTION + MAX_CONTEXT + MAX_SKETCH) return json({ error: 'That question is too long.' }, 413);
   let body;
   try { body = JSON.parse(text); } catch (e) { return json({ error: 'Not JSON' }, 400); }
   const question = body && typeof body.question === 'string' ? body.question.trim() : '';
   if (!question) return json({ error: 'Type a question first.' }, 400);
   if (question.length > MAX_QUESTION) return json({ error: 'That question is too long.' }, 413);
   const context = Array.isArray(body.context) ? body.context.filter(c => typeof c === 'string').slice(0, 100) : [];
-  const prompt = (context.length ? 'Rows already in the calculator:\n' + context.join('\n') + '\n\n' : '') + 'Question:\n' + question;
+  const sketches = (Array.isArray(body.sketches) ? body.sketches : [])
+    .filter(s => Array.isArray(s) && s.length >= 2 && s.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))
+    .slice(0, 10);
+  const drawing = sketches.map((s, i) => 'Stroke ' + (i + 1) + ': ' + s.map(([x, y]) => '(' + x + ', ' + y + ')').join(' ')).join('\n');
+  const prompt = (context.length ? 'Rows already in the calculator:\n' + context.join('\n') + '\n\n' : '')
+    + (drawing ? 'Strokes the person drew on the graph:\n' + drawing + '\n\n' : '')
+    + 'Question:\n' + question;
 
   let message;
   try {
