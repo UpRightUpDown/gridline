@@ -1,4 +1,4 @@
-/* Ask Claude: sends a question to the relay worker and returns the answer as
+/* Ask Claude: sends a question to the gridline-claude worker and returns the answer as
  * expression-list rows. Works in the browser (window.GAsk) and in Node. */
 (function (root) {
   'use strict';

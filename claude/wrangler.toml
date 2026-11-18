@@ -1,0 +1,12 @@
+name = "gridline-claude"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+# v1 was the relay to Claude Code on the owner's PC; the worker now calls the Claude API itself.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Relay"]
+
+[[migrations]]
+tag = "v2"
+deleted_classes = ["Relay"]

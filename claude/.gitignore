@@ -1,4 +1,2 @@
 .wrangler/
 node_modules/
-.token
-relay.log

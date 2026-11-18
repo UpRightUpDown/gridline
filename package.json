@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "node --test test/*.test.js",
-    "relay": "node relay/run.js"
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.8.0"
   }
 }
