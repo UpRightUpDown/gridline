@@ -46,8 +46,10 @@
     } catch (e) { /* storage unavailable */ }
     return null;
   }
+  // Rows waiting for Claude are left out of saved state and undo history.
+  const savedItems = () => state.items.filter(i => !i.pending);
   function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(Object.assign({}, state, { items: savedItems() }))); } catch (e) { /* ignore */ }
   }
   function nextColor() { const c = COLORS[state.colorIdx % 5]; state.colorIdx++; return c; }
   function newItem(type, extra) {
@@ -67,7 +69,7 @@
     save();
     clearTimeout(histTimer);
     const push = () => {
-      const snap = JSON.stringify(state.items);
+      const snap = JSON.stringify(savedItems());
       if (snap === history[histIndex]) return;
       history = history.slice(0, histIndex + 1);
       history.push(snap);
@@ -79,7 +81,7 @@
   }
   function undo() {
     clearTimeout(histTimer);
-    const snap = JSON.stringify(state.items);
+    const snap = JSON.stringify(savedItems());
     if (snap !== history[histIndex]) { history = history.slice(0, histIndex + 1); history.push(snap); histIndex++; }
     if (histIndex <= 0) return;
     histIndex--;
@@ -98,7 +100,7 @@
     updateUndoButtons();
   }
   function updateUndoButtons() {
-    $('#btn-undo').disabled = histIndex <= 0 && JSON.stringify(state.items) === history[histIndex];
+    $('#btn-undo').disabled = histIndex <= 0 && JSON.stringify(savedItems()) === history[histIndex];
     $('#btn-redo').disabled = histIndex >= history.length - 1;
   }
 
@@ -562,27 +564,36 @@
   function askClaude(it) {
     const question = ((it.type === 'note' ? it.text : it.latex) || '').trim();
     if (!question) return;
-    const wait = newItem('note', { text: 'Asking Claude…' });
-    insertAfter(it.id, wait, false);
-    const context = state.items.filter(i => i !== it && i !== wait)
+    const wait = newItem('note', { text: 'Asking Claude…', pending: true });
+    state.items.splice(indexOf(it.id) + 1, 0, wait);
+    const waitRow = makeRow(wait);
+    rows.get(it.id).el.after(waitRow.el);
+    refresh();
+    const context = savedItems().filter(i => i !== it)
       .map(i => i.type === 'note' ? (i.text ? '"' + i.text + '"' : '') : i.latex).filter(Boolean).slice(0, 100);
     window.GAsk.ask(question, context).then(steps => {
       const at = indexOf(wait.id);
-      if (at < 0) return; // the waiting row was deleted, so the answer is no longer wanted
+      if (at < 0) return; // the waiting row was deleted or undone away, so the answer is no longer wanted
       const added = steps.map(s => s.type === 'note' ? newItem('note', { text: s.content }) : newItem('expression', { latex: s.content }));
       state.items.splice(at, 1, ...added);
-      renderList();
-      // keep the stored LaTeX the same as what MathQuill shows
-      added.forEach(a => { const r = rows.get(a.id); if (r && r.mq) a.latex = r.mq.latex(); });
+      for (const a of added) {
+        const r = makeRow(a);
+        waitRow.el.before(r.el);
+        if (r.mq) a.latex = r.mq.latex(); // keep the stored LaTeX the same as what MathQuill shows
+      }
+      waitRow.el.remove();
+      rows.delete(wait.id);
       commit(true);
       refresh();
     }, err => {
-      const r = rows.get(wait.id);
-      if (!r) return;
-      r.ta.value = err.message;
-      r.ta.dispatchEvent(new Event('input'));
+      if (indexOf(wait.id) < 0) return;
+      wait.text = err.message;
+      waitRow.ta.value = err.message;
+      waitRow.ta.style.height = 'auto';
+      waitRow.ta.style.height = waitRow.ta.scrollHeight + 'px';
     });
   }
+
   function deleteItem(id) {
     const i = indexOf(id);
     if (i < 0) return;

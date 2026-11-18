@@ -21,7 +21,7 @@ test('ask forwards the question to the relay and returns its answer', async () =
   const ctx = fakeCtx();
   const relay = new Relay(ctx, { RELAY_TOKEN: 't' });
   const sent = [];
-  const sock = { send: m => { sent.push(JSON.parse(m)); setTimeout(() => relay.webSocketMessage(sock, JSON.stringify({ id: sent[0].id, steps: [{ type: 'expression', content: 'a=1' }] }))); } };
+  const sock = { readyState: 1, send: m => { sent.push(JSON.parse(m)); setTimeout(() => relay.webSocketMessage(sock, JSON.stringify({ id: sent[0].id, steps: [{ type: 'expression', content: 'a=1' }] }))); } };
   ctx.sockets.push(sock);
   const res = await relay.fetch(askReq({ question: 'what is a', context: ['b=2'] }));
   assert.strictEqual(res.status, 200);
@@ -49,4 +49,21 @@ test('the local relay turns Claude output into steps', async () => {
   assert.match(prompt, /q\?/);
   assert.match(prompt, /f\(x\)=x/);
   await assert.rejects(run.answer({ question: 'q' }, async () => JSON.stringify({ is_error: true, result: 'limit hit' })), /limit hit/);
+});
+
+test('the system prompt keeps its LaTeX backslashes', () => {
+  assert.ok(run.SYSTEM.includes(String.raw`\frac{d}{dx}`));
+  assert.ok(run.SYSTEM.includes(String.raw`\theta`));
+  assert.doesNotMatch(run.SYSTEM, /[\f\t\b\v]/);
+});
+
+test('a question fails at once when the relay drops', async () => {
+  const { Relay } = await load();
+  const ctx = fakeCtx();
+  const relay = new Relay(ctx, { RELAY_TOKEN: 't' });
+  const sock = { readyState: 1, close() {}, send: () => setTimeout(() => relay.webSocketClose(sock, 1006, '')) };
+  ctx.sockets.push(sock);
+  const res = await relay.fetch(askReq({ question: 'q' }));
+  assert.strictEqual(res.status, 502);
+  assert.match((await res.json()).error, /offline/);
 });

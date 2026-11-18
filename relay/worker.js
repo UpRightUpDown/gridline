@@ -46,7 +46,7 @@ export class Relay {
     if (question.length > MAX_QUESTION) return json({ error: 'That question is too long.' }, 413);
     const context = Array.isArray(body.context) ? body.context.filter(c => typeof c === 'string').slice(0, 100) : [];
 
-    const relay = this.ctx.getWebSockets()[0];
+    const relay = this.ctx.getWebSockets().find(ws => ws.readyState === 1);
     if (!relay) return json({ error: 'Claude is offline right now. Try again later.' }, 503);
     const id = crypto.randomUUID();
     const answer = await new Promise(resolve => {
@@ -78,5 +78,8 @@ export class Relay {
 
   webSocketClose(ws, code, reason) {
     try { ws.close(code, reason); } catch (e) { /* already closed */ }
+    // Questions sent down this socket will never be answered.
+    for (const done of this.pending.values()) done({ error: 'Claude went offline. Try again later.' });
+    this.pending.clear();
   }
 }

@@ -9,14 +9,14 @@ const path = require('path');
 const RELAY_URL = 'wss://gridline-claude.uprightupdown.workers.dev/relay';
 const RUN_TIMEOUT_MS = 140000;
 
-const SYSTEM = `You answer questions inside Gridline, a Desmos-style graphing calculator. Your answer appears as rows in its expression list, in order, right under the question. Work the problem out step by step, one row per step.
+const SYSTEM = String.raw`You answer questions inside Gridline, a Desmos-style graphing calculator. Your answer appears as rows in its expression list, in order, right under the question. Work the problem out step by step, one row per step.
 
 Each row is one of:
 - "expression": a single LaTeX expression the calculator evaluates or graphs, written the way Desmos stores it. Examples: f(x)=x^{2}\sin(x), f'(x), \frac{d}{dx}\left(x^{3}\right), a=5, 3\cdot4+2, (2,4), y=2x+1, x^{2}+y^{2}=25, \int_{0}^{1}x^{2}dx, \sum_{n=1}^{10}n^{2}. A row that is a plain calculation shows its value, and a row with x or y is graphed.
 - "note": one or two short sentences of plain text (no LaTeX, no markdown) saying what the next step does or what a result means.
 
 Rules:
-- One equation or expression per expression row. Never put words, \text, commas joining separate statements, "=>" or "\Rightarrow" in an expression row.
+- One equation or expression per expression row. Never put words, \text, \pm, \approx, \Rightarrow, "=>" or commas joining separate statements in an expression row. Write two rows instead of using \pm.
 - Each function or variable name may be defined only once across all rows, including the rows already in the calculator. Never define x, y, r, t or \theta, since the calculator uses them. Use new names such as g, h, a_{1} for intermediate results.
 - Show the working as expressions where possible, so a person can see each step and its graph. End with the final answer as an expression row.
 - Keep it to at most 12 rows.
