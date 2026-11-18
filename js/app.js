@@ -152,6 +152,7 @@
   // A Z pressed over the graph is held back: if no drawing starts, it is typed after all,
   // when Z comes up or just before the next key.
   let heldZ = null; // { key, target }
+  let zDown = false; // a Z pressed over the graph is still down
   function typeHeldZ() {
     const z = heldZ; heldZ = null;
     if (!z || document.activeElement !== z.target) return;
@@ -164,22 +165,30 @@
   }
   window.addEventListener('keydown', e => {
     const plainZ = e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
-    if (!plainZ) { typeHeldZ(); return; }
+    if (!plainZ) {
+      if (/^(Shift|Control|Alt|Meta|CapsLock)$/.test(e.key) || !heldZ) return;
+      // another key while Z is down means typing: put the z in first, and stop drawing
+      typeHeldZ();
+      graph.setDrawKey(false);
+      return;
+    }
     if (e.repeat) {
-      if (graph.drawKey) { e.preventDefault(); e.stopPropagation(); } // no row of z's while drawing
+      if (zDown) { e.preventDefault(); e.stopPropagation(); } // no row of z's
       return;
     }
     if (!graph.hovering) return;
     e.preventDefault(); e.stopPropagation();
     heldZ = { key: e.key, target: document.activeElement };
+    zDown = true;
     graph.setDrawKey(true);
   }, true);
   window.addEventListener('keyup', e => {
-    if (e.key.toLowerCase() !== 'z' || !graph.drawKey) return;
+    if (e.key.toLowerCase() !== 'z' || !zDown) return;
     typeHeldZ();
+    zDown = false;
     graph.setDrawKey(false);
   });
-  window.addEventListener('blur', () => { heldZ = null; graph.setDrawKey(false); });
+  window.addEventListener('blur', () => { heldZ = null; zDown = false; graph.setDrawKey(false); });
   graph.setSettings(state.settings);
   GM.settings.degrees = !!state.settings.degrees;
 
