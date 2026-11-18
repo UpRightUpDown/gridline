@@ -67,3 +67,17 @@ test('a question fails at once when the relay drops', async () => {
   assert.strictEqual(res.status, 502);
   assert.match((await res.json()).error, /offline/);
 });
+
+test('an old relay closing does not fail a question sent to its replacement', async () => {
+  const { Relay } = await load();
+  const ctx = fakeCtx();
+  const relay = new Relay(ctx, { RELAY_TOKEN: 't' });
+  const old = { readyState: 3, close() {} };
+  const sock = { readyState: 1, send: m => setTimeout(() => {
+    relay.webSocketClose(old, 1000, '');
+    relay.webSocketMessage(sock, JSON.stringify({ id: JSON.parse(m).id, steps: [{ type: 'note', content: 'ok' }] }));
+  }) };
+  ctx.sockets.push(old, sock);
+  const res = await relay.fetch(askReq({ question: 'q' }));
+  assert.strictEqual(res.status, 200);
+});

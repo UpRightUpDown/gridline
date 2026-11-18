@@ -16,7 +16,7 @@ Each row is one of:
 - "note": one or two short sentences of plain text (no LaTeX, no markdown) saying what the next step does or what a result means.
 
 Rules:
-- One equation or expression per expression row. Never put words, \text, \pm, \approx, \Rightarrow, "=>" or commas joining separate statements in an expression row. Write two rows instead of using \pm.
+- One equation or expression per expression row. Never put words, \text, \pm, \approx, \neq, \Rightarrow, "=>" or commas joining separate statements in an expression row. Write two rows instead of using \pm.
 - Each function or variable name may be defined only once across all rows, including the rows already in the calculator. Never define x, y, r, t or \theta, since the calculator uses them. Use new names such as g, h, a_{1} for intermediate results.
 - Show the working as expressions where possible, so a person can see each step and its graph. End with the final answer as an expression row.
 - Keep it to at most 12 rows.

@@ -564,6 +564,7 @@
   function askClaude(it) {
     const question = ((it.type === 'note' ? it.text : it.latex) || '').trim();
     if (!question) return;
+    commit(true); // the question gets its own undo step, separate from the answer
     const wait = newItem('note', { text: 'Asking Claude…', pending: true });
     state.items.splice(indexOf(it.id) + 1, 0, wait);
     const waitRow = makeRow(wait);
@@ -576,6 +577,12 @@
       if (at < 0) return; // the waiting row was deleted or undone away, so the answer is no longer wanted
       const added = steps.map(s => s.type === 'note' ? newItem('note', { text: s.content }) : newItem('expression', { latex: s.content }));
       state.items.splice(at, 1, ...added);
+      // a row the calculator cannot read at all is shown as text instead of an error
+      const checked = build(savedItems()).byId;
+      for (const a of added) {
+        const err = a.type === 'expression' && (checked.get(a.id) || {}).error;
+        if (err && /^Unsupported command/.test(err)) { a.type = 'note'; a.text = a.latex; delete a.latex; }
+      }
       for (const a of added) {
         const r = makeRow(a);
         waitRow.el.before(r.el);
@@ -587,10 +594,11 @@
       refresh();
     }, err => {
       if (indexOf(wait.id) < 0) return;
-      wait.text = err.message;
+      // the waiting row becomes an ordinary note that says what went wrong
+      delete wait.pending;
       waitRow.ta.value = err.message;
-      waitRow.ta.style.height = 'auto';
-      waitRow.ta.style.height = waitRow.ta.scrollHeight + 'px';
+      waitRow.ta.dispatchEvent(new Event('input'));
+      commit(true);
     });
   }
 

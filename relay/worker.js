@@ -51,7 +51,7 @@ export class Relay {
     const id = crypto.randomUUID();
     const answer = await new Promise(resolve => {
       const timer = setTimeout(() => { this.pending.delete(id); resolve({ error: 'Claude took too long to answer.' }); }, TIMEOUT_MS);
-      this.pending.set(id, a => { clearTimeout(timer); resolve(a); });
+      this.pending.set(id, { ws: relay, done: a => { clearTimeout(timer); resolve(a); } });
       relay.send(JSON.stringify({ id, question, context }));
     });
     return json(answer, answer.error ? 502 : 200);
@@ -70,16 +70,19 @@ export class Relay {
   webSocketMessage(ws, message) {
     let m;
     try { m = JSON.parse(message); } catch (e) { return; }
-    const done = m && this.pending.get(m.id);
-    if (!done) return;
+    const p = m && this.pending.get(m.id);
+    if (!p) return;
     this.pending.delete(m.id);
-    done(m.error ? { error: String(m.error) } : { steps: m.steps });
+    p.done(m.error ? { error: String(m.error) } : { steps: m.steps });
   }
 
   webSocketClose(ws, code, reason) {
     try { ws.close(code, reason); } catch (e) { /* already closed */ }
     // Questions sent down this socket will never be answered.
-    for (const done of this.pending.values()) done({ error: 'Claude went offline. Try again later.' });
-    this.pending.clear();
+    for (const [id, p] of this.pending) {
+      if (p.ws !== ws) continue;
+      this.pending.delete(id);
+      p.done({ error: 'Claude went offline. Try again later.' });
+    }
   }
 }
