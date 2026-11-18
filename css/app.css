@@ -393,7 +393,7 @@ body.keypad-open .kp-toggle { visibility: hidden; }
 
 /* ------------------------------------------------------- appearance panel */
 .brand-logo { height: 22px; width: auto; max-width: 280px; object-fit: contain; }
-@media (max-width: 700px) { .brand-logo { max-width: 160px; } } /* leave room for the centre icon */
+@media (max-width: 1000px) { .brand-logo { max-width: 160px; } } /* leave room for the centre icon */
 .topbar-subtitle { font-size: 15.84px; font-weight: 300; }
 .bp-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .bp {

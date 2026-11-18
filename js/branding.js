@@ -131,15 +131,15 @@
   // 44px tall, so a large photo or PNG is scaled down to LOGO_HEIGHT first;
   // that keeps the saved settings small enough for browser storage and the worker.
   // A newer upload, "Use default", "Remove" or a reset cancels a read still in progress.
-  let uploadGen = 0;
-  function readImage(input, done) {
+  const uploadGen = { logo: 0, center: 0 }; // one counter per image slot
+  function readImage(slot, input, done) {
     const f = input.files[0];
     input.value = '';
     if (!f) return;
     if (!/^image\/(png|jpeg|gif|webp|svg\+xml)$/.test(f.type)) { alert('Please choose a PNG, JPEG, GIF, WebP or SVG image.'); return; }
     if (f.type === 'image/svg+xml' && f.size > MAX_LOGO_BYTES) { alert('Please choose an SVG under 1 MB.'); return; }
-    const gen = ++uploadGen;
-    const finish = url => { if (gen === uploadGen) done(url); };
+    const gen = ++uploadGen[slot];
+    const finish = url => { if (gen === uploadGen[slot]) done(url); };
     const reader = new FileReader();
     reader.onload = () => {
       const url = String(reader.result);
@@ -220,10 +220,10 @@
     const syncPrev = () => { prev.src = brand.logo || DEFAULT_LOGO; prev.style.background = brand.barColor; };
     syncPrev();
     upload.addEventListener('click', () => file.click());
-    file.addEventListener('change', () => readImage(file, url => {
+    file.addEventListener('change', () => readImage('logo', file, url => {
       brand.logo = url; sanitize(brand); brand.showLogo = true; showCb.checked = true; apply(); save(); syncPrev();
     }));
-    def.addEventListener('click', () => { uploadGen++; brand.logo = ''; apply(); save(); syncPrev(); });
+    def.addEventListener('click', () => { uploadGen.logo++; brand.logo = ''; apply(); save(); syncPrev(); });
     showCb.addEventListener('change', () => { brand.showLogo = showCb.checked; apply(); save(); });
     logoBox.append(prev, upload, def, file, show);
 
@@ -257,8 +257,8 @@
     };
     syncCenter();
     cUpload.addEventListener('click', () => cFile.click());
-    cFile.addEventListener('change', () => readImage(cFile, url => { brand.centerIcon = url; sanitize(brand); apply(); save(); syncCenter(); }));
-    cRemove.addEventListener('click', () => { uploadGen++; brand.centerIcon = ''; apply(); save(); syncCenter(); });
+    cFile.addEventListener('change', () => readImage('center', cFile, url => { brand.centerIcon = url; sanitize(brand); apply(); save(); syncCenter(); }));
+    cRemove.addEventListener('click', () => { uploadGen.center++; brand.centerIcon = ''; apply(); save(); syncCenter(); });
     cSize.addEventListener('input', () => { brand.centerSize = Number(cSize.value); apply(); save(); });
     cBox.append(cPrev, cUpload, cRemove, cFile, cSizeLbl);
 
@@ -279,8 +279,8 @@
     panel.querySelector('.bp-x').addEventListener('click', close);
     panel.querySelector('.bp-done').addEventListener('click', close);
     panel.querySelector('.bp-reset').addEventListener('click', () => {
-      uploadGen++;
       if (!confirm('Reset the top bar, logo and text to the defaults?')) return;
+      uploadGen.logo++; uploadGen.center++;
       brand = Object.assign({}, DEFAULTS); apply(); save(); close(); open();
     });
     panel.addEventListener('mousedown', e => { if (e.target === panel) close(); });
