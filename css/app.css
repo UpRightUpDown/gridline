@@ -437,8 +437,11 @@ body.keypad-open .kp-toggle { visibility: hidden; }
 .bp-logo button:disabled { opacity: 0.4; cursor: default; }
 
 /* ------------------------------------------------------------ done popup */
+/* long top bar text shrinks and truncates, so Done always stays on screen */
+.brand, .wordmark, .topbar-title, .topbar-subtitle { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.topbar-sep, .brand-logo { flex: none; }
 .topbar-done {
-  margin: 0 12px 0 auto; padding: 6px 16px; border: 1px solid currentColor; border-radius: 4px;
+  flex: none; margin: 0 12px 0 auto; padding: 6px 16px; border: 1px solid currentColor; border-radius: 4px;
   background: transparent; color: inherit; font: 400 14px Arial, sans-serif; position: relative; z-index: 1;
 }
 .topbar-done:hover { background: rgba(255, 255, 255, 0.15); }
@@ -456,7 +459,7 @@ body.keypad-open .kp-toggle { visibility: hidden; }
 .dd-minutes { font-size: 56px; letter-spacing: -0.02em; margin: 4px 0 2px !important; font-variant-numeric: tabular-nums; }
 .dd-start { font-size: 14px; color: #555; font-variant-numeric: tabular-nums; }
 .dd-logo { display: block; height: 36px; max-width: 220px; object-fit: contain; margin: 16px auto 22px; padding: 6px 14px; border-radius: 18px; }
-.dd-message { font-size: 15px; line-height: 1.45; color: #3d5a80; white-space: pre-line; }
+.dd-message { font-size: 15px; line-height: 1.45; color: #3d5a80; white-space: pre-line; overflow-wrap: anywhere; }
 .dd-message p + p { margin-top: 14px; }
 .dd-continue {
   margin-top: 24px; border: 0; border-radius: 3px; padding: 12px 28px; background: var(--blue); color: #fff; font: 400 16px Arial, sans-serif;

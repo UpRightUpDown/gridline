@@ -293,7 +293,11 @@
       brand = Object.assign({}, DEFAULTS); apply(); save(); close(); open();
     });
     panel.addEventListener('mousedown', e => { if (e.target === panel) close(); });
-    panel.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+    panel.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); }
+      // undo and redo belong to the field being typed in, not the calculator behind the panel
+      else if ((e.ctrlKey || e.metaKey) && /^[zy]$/i.test(e.key)) e.stopPropagation();
+    });
     document.body.appendChild(panel);
     panel.querySelector('.bp-body input[type="text"]').focus();
   }

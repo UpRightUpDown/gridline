@@ -19,7 +19,6 @@
 
   const api = { elapsed, startTime, paragraphs };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; }
-  root.GDone = api;
 
   const started = new Date();
   const btn = document.getElementById('btn-done');
@@ -32,7 +31,10 @@
     mins.textContent = elapsed(started, new Date());
     dlg.querySelector('.dd-start').textContent = 'Start time: ' + startTime(started);
     const logo = dlg.querySelector('.dd-logo');
-    logo.src = brand.centerIcon || brand.logo || 'assets/logo.svg'; // the centre icon is the one on screen when set
+    // the logo the top bar shows: the top-left one, or else the centre icon
+    const src = brand.showLogo !== false ? brand.logo || 'assets/logo.svg' : brand.centerIcon;
+    if (src) logo.src = src; else logo.removeAttribute('src');
+    logo.classList.toggle('hidden', !src);
     logo.style.background = brand.barColor || '';
     const msg = dlg.querySelector('.dd-message');
     msg.replaceChildren(...paragraphs(brand.doneMessage).map(t => {
