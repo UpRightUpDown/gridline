@@ -435,3 +435,41 @@ body.keypad-open .kp-toggle { visibility: hidden; }
 .bp-inline input[type="text"] { flex: 1; }
 .bp-logo input[type="range"] { width: 90px; vertical-align: middle; }
 .bp-logo button:disabled { opacity: 0.4; cursor: default; }
+
+/* ------------------------------------------------------------ done popup */
+/* long top bar text shrinks and truncates, so Done always stays on screen */
+.brand, .wordmark, .topbar-title, .topbar-subtitle { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.topbar-sep, .brand-logo { flex: none; }
+.topbar-done {
+  flex: none; margin: 0 12px 0 auto; padding: 6px 16px; border: 1px solid currentColor; border-radius: 4px;
+  background: transparent; color: inherit; font: 400 14px Arial, sans-serif; position: relative; z-index: 1;
+}
+.topbar-done:hover { background: rgba(255, 255, 255, 0.15); }
+.topbar-done:active { background: rgba(255, 255, 255, 0.25); }
+.topbar-done:focus-visible, .dd-continue:focus-visible, .dd-x:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.done-dialog {
+  width: 520px; max-width: calc(100vw - 32px); padding: 36px 40px 32px; border: 0; border-radius: 6px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3); text-align: center; color: var(--text); font-family: Arial, sans-serif;
+}
+.done-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.done-dialog p { margin: 0; }
+.dd-x { position: absolute; top: 10px; right: 12px; border: 0; background: none; font-size: 30px; line-height: 1; color: rgba(0, 0, 0, 0.45); padding: 0 6px; }
+.dd-x:hover { color: #000; }
+.dd-lead { font-size: 22px; }
+.dd-minutes { font-size: 56px; letter-spacing: -0.02em; margin: 4px 0 2px !important; font-variant-numeric: tabular-nums; }
+.dd-start { font-size: 14px; color: #555; font-variant-numeric: tabular-nums; }
+.dd-logo { display: block; height: 36px; max-width: 220px; object-fit: contain; margin: 16px auto 22px; padding: 6px 14px; border-radius: 18px; }
+.dd-message { font-size: 15px; line-height: 1.45; color: #3d5a80; white-space: pre-line; overflow-wrap: anywhere; }
+.dd-message p + p { margin-top: 14px; }
+.dd-continue {
+  margin-top: 24px; border: 0; border-radius: 3px; padding: 12px 28px; background: var(--blue); color: #fff; font: 400 16px Arial, sans-serif;
+}
+.dd-continue:hover { background: #255fbd; }
+.dd-continue:active { background: #1e4f9e; }
+.bp textarea { border: 1px solid rgba(0, 0, 0, 0.2); border-radius: 3px; padding: 7px 8px; font: 300 15px Arial, sans-serif; outline: none; resize: vertical; }
+.bp textarea:focus { border-color: var(--blue); }
+@media (max-width: 500px) {
+  .done-dialog { padding: 32px 20px 24px; }
+  .dd-lead { font-size: 18px; }
+  .dd-minutes { font-size: 44px; }
+}

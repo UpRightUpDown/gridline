@@ -17,7 +17,8 @@
     centerText: '',
     title: 'Graphing Calculator',
     subtitle: '',
-    powered: 'gridline'
+    powered: 'gridline',
+    doneMessage: 'If you’re done, show this screen to your teacher. Press “Continue Session” to return to the calculator.'
   };
   const DEFAULT_LOGO = 'assets/logo.svg';
   const MAX_LOGO_BYTES = 1024 * 1024; // size of a saved image's data: URL
@@ -85,6 +86,7 @@
     b.nameBold = b.nameBold !== false;
     b.centerSize = Math.min(44, Math.max(16, Number(b.centerSize) || DEFAULTS.centerSize));
     for (const k of ['name', 'title', 'subtitle', 'powered', 'centerText']) b[k] = String(b[k] == null ? '' : b[k]).slice(0, 80);
+    b.doneMessage = String(b.doneMessage == null ? '' : b.doneMessage).slice(0, 500);
     b.showLogo = b.showLogo !== false;
     return b;
   }
@@ -181,6 +183,12 @@
     inp.addEventListener('input', () => { brand[key] = inp.value; apply(); save(); });
     return inp;
   }
+  function doneInput() {
+    const ta = document.createElement('textarea');
+    ta.maxLength = 500; ta.rows = 4; ta.value = brand.doneMessage;
+    ta.addEventListener('input', () => { brand.doneMessage = ta.value; save(); });
+    return ta;
+  }
   function colorInput(key) {
     const wrap = document.createElement('span');
     wrap.className = 'bp-color';
@@ -273,7 +281,8 @@
       field('Centre text', textInput('centerText', 'Optional'), 'Shown to the right of the centre icon, in the same style as the "powered by" name. The icon and text are centred together.'),
       field('Header text', textInput('title', 'e.g. Graphing Calculator')),
       field('Second header text', textInput('subtitle', 'Optional'), 'Shown after another divider. Leave blank to hide it.'),
-      field('Powered by', textInput('powered', 'Name under "powered by"'), 'Leave blank to hide the "powered by" line.')
+      field('Powered by', textInput('powered', 'Name under "powered by"'), 'Leave blank to hide the "powered by" line.'),
+      field('Done popup message', doneInput(), 'Shown when someone clicks Done at the top right. Leave a blank line to start a new paragraph.')
     );
 
     panel.querySelector('.bp-x').addEventListener('click', close);
@@ -284,7 +293,11 @@
       brand = Object.assign({}, DEFAULTS); apply(); save(); close(); open();
     });
     panel.addEventListener('mousedown', e => { if (e.target === panel) close(); });
-    panel.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+    panel.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); }
+      // undo and redo belong to the field being typed in, not the calculator behind the panel
+      else if ((e.ctrlKey || e.metaKey) && /^[zy]$/i.test(e.key)) e.stopPropagation();
+    });
     document.body.appendChild(panel);
     panel.querySelector('.bp-body input[type="text"]').focus();
   }
