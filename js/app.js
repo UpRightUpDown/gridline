@@ -577,16 +577,21 @@
       if (at < 0) return; // the waiting row was deleted or undone away, so the answer is no longer wanted
       const added = steps.map(s => s.type === 'note' ? newItem('note', { text: s.content }) : newItem('expression', { latex: s.content }));
       state.items.splice(at, 1, ...added);
-      // a row the calculator cannot read at all is shown as text instead of an error
-      const checked = build(savedItems()).byId;
-      for (const a of added) {
-        const err = a.type === 'expression' && (checked.get(a.id) || {}).error;
-        if (err && /^Unsupported command/.test(err)) { a.type = 'note'; a.text = a.latex; delete a.latex; }
-      }
+      const original = new Map();
       for (const a of added) {
         const r = makeRow(a);
         waitRow.el.before(r.el);
-        if (r.mq) a.latex = r.mq.latex(); // keep the stored LaTeX the same as what MathQuill shows
+        if (r.mq) { original.set(a.id, a.latex); a.latex = r.mq.latex(); } // keep the stored LaTeX the same as what MathQuill shows
+      }
+      // a row the calculator cannot read at all is shown as text instead of an error
+      let checked = new Map();
+      try { checked = build(savedItems()).byId; } catch (e) { console.error(e); }
+      for (const a of added) {
+        const err = a.type === 'expression' && (checked.get(a.id) || {}).error;
+        if (!err || !/^Unsupported command/.test(err)) continue;
+        const old = rows.get(a.id);
+        a.type = 'note'; a.text = original.get(a.id); delete a.latex;
+        old.el.replaceWith(makeRow(a).el);
       }
       waitRow.el.remove();
       rows.delete(wait.id);
