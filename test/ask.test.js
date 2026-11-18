@@ -59,3 +59,23 @@ test('ask leaves sketches out when nothing was drawn', async () => {
   await A.ask('q', [], f, []);
   assert.strictEqual(JSON.parse(f.calls[0].opts.body).sketches, undefined);
 });
+
+test('describeItems sends every row, with tables written out row by row', () => {
+  const items = [
+    { type: 'expression', latex: 'a=2' },
+    { type: 'expression', latex: '' },
+    { type: 'note', text: 'data from class' },
+    { type: 'table', columns: [{ latex: 'x_{1}', values: ['1', '2', '', ''] }, { latex: 'y_{1}', values: ['3', '', '', ''] }] },
+    { type: 'table', columns: [{ latex: 'x_{2}', values: ['', ''] }] }
+  ];
+  assert.deepStrictEqual(A.describeItems(items), [
+    'a=2',
+    '"data from class"',
+    'Table (headers, then one row per line):\n["x_{1}","y_{1}"]\n["1","3"]\n["2",""]',
+    'Table (headers, then one row per line):\n["x_{2}"]'
+  ]);
+  const bars = A.describeItems([{ type: 'table', columns: [{ latex: 'x_{1}', values: ['1 | 2'] }, { latex: 'y_{1}', values: ['3'] }] }]);
+  assert.strictEqual(bars[0].split('\n')[2], '["1 | 2","3"]');
+  const many = Array.from({ length: 150 }, (_, i) => ({ type: 'expression', latex: 'a_{' + i + '}=' + i }));
+  assert.strictEqual(A.describeItems(many).length, 150);
+});
