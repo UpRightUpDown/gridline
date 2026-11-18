@@ -22,7 +22,18 @@
       <img class="topbar-center hidden" alt="">
       <span class="topbar-center-text hidden"></span>
     </div>
+    <button class="topbar-done" id="btn-done">Done</button>
   </header>
+
+  <dialog class="done-dialog" id="done-dialog" aria-labelledby="dd-lead">
+    <button class="dd-x" aria-label="Close">×</button>
+    <p class="dd-lead" id="dd-lead">You've been using the calculator for</p>
+    <p class="dd-minutes"></p>
+    <p class="dd-start"></p>
+    <img class="dd-logo" alt="">
+    <div class="dd-message"></div>
+    <button class="dd-continue">Continue Session</button>
+  </dialog>
 
   <main class="app">
     <section class="exp-panel" id="exp-panel">
@@ -180,5 +191,6 @@
   <script src="js/ask.js"></script>
   <script src="js/app.js"></script>
   <script src="js/branding.js"></script>
+  <script src="js/done.js"></script>
 </body>
 </html>
