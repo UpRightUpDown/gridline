@@ -145,8 +145,37 @@
     onDragPoint(info, x, y) {
       if (info.x) setSliderValue(info.xItem, info.x, x);
       if (info.y) setSliderValue(info.yItem, info.y, y);
+    },
+    onSketchStart() {
+      // pressing Z typed a "z" into the row that had focus; drawing means it was not meant as text
+      const f = zTypedInto; zTypedInto = null;
+      if (!f) return;
+      if (f.ta) {
+        const i = f.ta.selectionStart;
+        if (i > 0 && f.ta.selectionEnd === i && /z/i.test(f.ta.value[i - 1])) {
+          f.ta.setRangeText('', i - 1, i, 'end');
+          f.ta.dispatchEvent(new Event('input'));
+        }
+      } else if (f.mq && /z$/i.test(f.mq.latex())) f.mq.keystroke('Backspace');
     }
   });
+  // Hold Z and drag on the graph to draw. The strokes go to Claude with the next question.
+  let zTypedInto = null;
+  const isZ = e => e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
+  window.addEventListener('keydown', e => {
+    if (!isZ(e)) return;
+    if (e.repeat) {
+      // holding Z to draw should not type a row of z's
+      if (graph.hovering || graph.drawKey) { e.preventDefault(); e.stopPropagation(); }
+      return;
+    }
+    const a = document.activeElement;
+    zTypedInto = a && a.classList.contains('note-text') ? { ta: a }
+      : lastFocusedMQ && a && a.closest && a.closest('.mq-field') ? { mq: lastFocusedMQ.mq } : null;
+    graph.setDrawKey(true);
+  }, true);
+  window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'z') { zTypedInto = null; graph.setDrawKey(false); } });
+  window.addEventListener('blur', () => { zTypedInto = null; graph.setDrawKey(false); });
   graph.setSettings(state.settings);
   GM.settings.degrees = !!state.settings.degrees;
 
@@ -591,7 +620,8 @@
     refresh();
     const context = savedItems()
       .map(i => i.type === 'note' ? (i.text ? '"' + i.text + '"' : '') : i.latex).filter(Boolean).slice(0, 100);
-    window.GAsk.ask(question, context).then(steps => {
+    const sketches = graph.takeSketches();
+    window.GAsk.ask(question, context, null, sketches).then(steps => {
       const at = indexOf(wait.id);
       if (at < 0) return; // the placeholder was undone away, so the answer is no longer wanted
       const added = steps.map(s => s.type === 'note' ? newItem('note', { text: s.content }) : newItem('expression', { latex: s.content }));
@@ -618,6 +648,8 @@
       refresh();
     }, err => {
       console.error(err);
+      graph.sketches = sketches.concat(graph.sketches); // keep the drawing for the next try
+      graph.redraw();
       const at = indexOf(wait.id);
       if (at < 0) return;
       // put the question back where it was so it is not lost

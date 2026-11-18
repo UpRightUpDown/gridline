@@ -50,6 +50,9 @@
       this.label = null;      // {x, y, color, gx, gy} pinned label
       this.trace = null;      // active trace
       this.pointers = new Map();
+      this.sketches = [];     // hand-drawn strokes, each [[x, y], ...] in graph coordinates
+      this.drawKey = false;   // Z is held: a left drag draws instead of panning
+      this.hovering = false;
       this.dirty = true;
       this.resize();
       this.setDefaultView();
@@ -111,6 +114,12 @@
       this.viewChanged();
     }
     redraw() { this.dirty = true; }
+    setDrawKey(on) {
+      this.drawKey = on;
+      if (!this.pointers.size) this.canvas.style.cursor = on ? 'crosshair' : '';
+    }
+    // Hand the strokes over and clear them from the graph.
+    takeSketches() { const s = this.sketches; this.sketches = []; this.redraw(); return s; }
 
     setGraphs(graphs, selectedId) {
       this.graphs = graphs;
@@ -135,7 +144,8 @@
       c.addEventListener('pointermove', e => this.onMove(e));
       c.addEventListener('pointerup', e => this.onUp(e));
       c.addEventListener('pointercancel', e => this.onUp(e));
-      c.addEventListener('pointerleave', () => { if (!this.pointers.size && this.hover) { this.hover = null; this.redraw(); } });
+      c.addEventListener('pointerenter', () => { this.hovering = true; });
+      c.addEventListener('pointerleave', () => { this.hovering = false; if (!this.pointers.size && this.hover) { this.hover = null; this.redraw(); } });
     }
     local(e) { const r = this.canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
     onDown(e) {
@@ -150,6 +160,13 @@
         return;
       }
       this.downAt = p; this.moved = false;
+      if (this.drawKey && e.button === 0) {
+        this.mode = 'sketch';
+        this.sketches.push([[this.gx(p.x), this.gy(p.y)]]);
+        this.lastSketchPx = p;
+        if (this.hooks.onSketchStart) this.hooks.onSketchStart();
+        return;
+      }
       // draggable points first
       const dp = this.hitDraggable(p);
       if (dp) { this.mode = 'drag'; this.dragging = dp; this.canvas.style.cursor = 'grabbing'; return; }
@@ -171,6 +188,8 @@
     onMove(e) {
       const p = this.local(e);
       if (!this.pointers.has(e.pointerId)) {
+        this.hovering = true;
+        if (this.drawKey) { this.canvas.style.cursor = 'crosshair'; return; }
         // hover cursor
         const over = this.hitDraggable(p) ? 'grab' : (this.hitPOI(p) || this.hitCurve(p)) ? 'pointer' : '';
         this.canvas.style.cursor = over;
@@ -185,7 +204,13 @@
         return;
       }
       if (this.downAt && Math.hypot(p.x - this.downAt.x, p.y - this.downAt.y) > 3) this.moved = true;
-      if (this.mode === 'pan') {
+      if (this.mode === 'sketch') {
+        const q = this.lastSketchPx;
+        if (Math.hypot(p.x - q.x, p.y - q.y) < 2) return;
+        this.sketches[this.sketches.length - 1].push([this.gx(p.x), this.gy(p.y)]);
+        this.lastSketchPx = p;
+        this.redraw();
+      } else if (this.mode === 'pan') {
         const s = this.panStart;
         this.cx = s.cx - (p.x - s.p.x) / this.sx;
         this.cy = s.cy + (p.y - s.p.y) / this.sy;
@@ -214,7 +239,7 @@
         this.trace = null;
       }
       this.mode = null;
-      this.canvas.style.cursor = '';
+      this.canvas.style.cursor = this.drawKey ? 'crosshair' : '';
       this.redraw();
     }
 
@@ -359,12 +384,27 @@
         if (this.label && this.label.x === q.x && this.label.y === q.y) continue;
         this.dot(q.x, q.y, '#999', 4.5, true);
       }
+      this.safe(() => this.drawSketches());
       if (this.trace) {
         this.dot(this.trace.x, this.trace.y, this.trace.g.color, 4.5);
         this.drawLabel(this.trace.x, this.trace.y);
       } else if (this.label) {
         this.dot(this.label.x, this.label.y, this.label.color, 4.5);
         this.drawLabel(this.label.x, this.label.y);
+      }
+    }
+    drawSketches() {
+      const ctx = this.ctx;
+      ctx.strokeStyle = 'rgba(40,40,40,0.85)';
+      ctx.fillStyle = 'rgba(40,40,40,0.85)';
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.setLineDash([]);
+      for (const s of this.sketches) {
+        if (s.length === 1) { ctx.beginPath(); ctx.arc(this.X(s[0][0]), this.Y(s[0][1]), 1.5, 0, Math.PI * 2); ctx.fill(); continue; }
+        ctx.beginPath();
+        s.forEach(([x, y], i) => i ? ctx.lineTo(this.X(x), this.Y(y)) : ctx.moveTo(this.X(x), this.Y(y)));
+        ctx.stroke();
       }
     }
     safe(fn) { try { fn(); } catch (e) { /* bad expression mid-edit */ } }
