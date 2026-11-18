@@ -17,6 +17,18 @@ It handles:
 
 Ctrl+Shift+` opens the Appearance panel, which sets the top bar's colours, logo, name and text. These settings are shared by every device: the page keeps them in a small Cloudflare Worker (`worker/`, deployed as `gridline-settings`), and changes reach other devices the next time they load the page or come back to the tab. Deploy the worker with `npx wrangler deploy` from `worker/`.
 
+## Asking Claude
+
+Type a question into any row and press Shift+Enter. Claude answers step by step in new rows under it: expressions you can see and graph, with short notes between them. While it works, the row under the question says "Asking Claude…"; if it fails, that row says why.
+
+Questions go through a second Cloudflare Worker (`relay/worker.js`, deployed as `gridline-claude`) to Claude Code running on the owner's computer, so every answer uses the owner's Claude subscription. Asking is open to anyone who has the page. The computer must be on and running the relay:
+
+```
+npm run relay
+```
+
+The relay needs the token stored as the worker's `RELAY_TOKEN` secret, in `relay/.token` (not committed) or the `RELAY_TOKEN` environment variable. To set a new one, write a random string to `relay/.token`, then run `npx wrangler secret put RELAY_TOKEN < .token` from `relay/`. Deploy the worker with `npx wrangler deploy` from `relay/`.
+
 Math input uses [MathQuill](http://mathquill.com) (MPL-2.0) and jQuery (MIT), both in `vendor/`.
 
 Run the tests with `npm test`.
