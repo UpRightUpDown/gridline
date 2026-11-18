@@ -429,7 +429,7 @@ body.keypad-open .kp-toggle { visibility: hidden; }
 }
 .topbar-center { width: auto; max-width: 200px; object-fit: contain; }
 /* same type as the "powered by" name */
-.topbar-center-text { font: 600 20px Arial, sans-serif; letter-spacing: -0.3px; }
+.topbar-center-text { font: 700 22px Arial, sans-serif; letter-spacing: -0.3px; }
 .bp-inline { display: flex; align-items: center; gap: 12px; }
 .bp-inline input[type="text"] { flex: 1; }
 .bp-logo input[type="range"] { width: 90px; vertical-align: middle; }
