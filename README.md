@@ -19,7 +19,7 @@ Ctrl+Shift+` opens the Appearance panel, which sets the top bar's colours, logo,
 
 ## Asking Claude
 
-Type a question into any row and press Shift+Enter. Claude answers step by step in new rows under it: expressions you can see and graph, with short notes between them. While it works, the row under the question says "Asking Claude…"; if it fails, that row says why.
+Type a question into any row and press Shift+Enter. The row disappears to show the question was sent, and a moment later Claude's answer appears in its place, step by step: expressions you can see and graph, with short notes between them. There is no waiting indicator. If the request fails, the question comes back so you can try again.
 
 Questions go to a second Cloudflare Worker (`claude/worker.js`, deployed as `gridline-claude`), which asks Claude Opus 5.5 through the Claude API. It runs entirely in the cloud; nothing needs to be running on anyone's computer. Asking is open to anyone who has the page, and each question is billed to the API key stored as the worker's `ANTHROPIC_API_KEY` secret. Set the key with `npx wrangler secret put ANTHROPIC_API_KEY` and deploy with `npx wrangler deploy`, both from `claude/`.
 
