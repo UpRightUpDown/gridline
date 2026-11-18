@@ -15,6 +15,8 @@ It handles:
 - Pan, scroll to zoom, pinch, zoom buttons and a home button. The wrench menu sets the grid, axes, bounds, axis labels, and radians or degrees.
 - An on-screen keypad, undo and redo, notes, line and point styles, a resizable list, and saving to local storage.
 
+Ctrl+Shift+` opens the Appearance panel, which sets the top bar's colours, logo, name and text. These settings are shared by every device: the page keeps them in a small Cloudflare Worker (`worker/`, deployed as `gridline-settings`), and changes reach other devices the next time they load the page or come back to the tab. Deploy the worker with `npx wrangler deploy` from `worker/`.
+
 Math input uses [MathQuill](http://mathquill.com) (MPL-2.0) and jQuery (MIT), both in `vendor/`.
 
 Run the tests with `npm test`.

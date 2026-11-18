@@ -1,0 +1,7 @@
+name = "gridline-settings"
+main = "index.js"
+compatibility_date = "2026-11-01"
+
+[[kv_namespaces]]
+binding = "SETTINGS"
+id = "668fd533301f4c5c84c33e763a940e7e"
