@@ -392,7 +392,7 @@ body.keypad-open .kp-toggle { visibility: hidden; }
 }
 
 /* ------------------------------------------------------- appearance panel */
-.brand-logo { height: 22px; width: auto; max-width: 160px; object-fit: contain; }
+.brand-logo { height: 22px; width: auto; max-width: 280px; object-fit: contain; }
 .topbar-subtitle { font-size: 15.84px; font-weight: 300; }
 .bp-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .bp {

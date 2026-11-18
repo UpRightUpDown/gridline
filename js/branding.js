@@ -20,7 +20,9 @@
     powered: 'gridline'
   };
   const DEFAULT_LOGO = 'assets/logo.svg';
-  const MAX_LOGO_BYTES = 1024 * 1024;
+  const MAX_LOGO_BYTES = 1024 * 1024; // size of a saved image's data: URL
+  const LOGO_HEIGHT = 176;             // 4x the tallest an image is shown, for sharp high-DPI screens
+  const LOGO_WIDTH = 1600;
   const HEX = /^#[0-9a-f]{6}$/i;
   const IMAGE_URL = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,/;
   const REMOTE = 'https://gridline-settings.uprightupdown.workers.dev/branding';
@@ -125,15 +127,37 @@
 
   // ------------------------------------------------------------ panel
   let panel = null;
-  // read a chosen image file as a data: URL, after checking its size and type
+  // Read a chosen image file as a data: URL. The top bar shows images at most
+  // 44px tall, so a large photo or PNG is scaled down to LOGO_HEIGHT first;
+  // that keeps the saved settings small enough for browser storage and the worker.
   function readImage(input, done) {
     const f = input.files[0];
     input.value = '';
     if (!f) return;
-    if (f.size > MAX_LOGO_BYTES) { alert('Please choose an image under 1 MB.'); return; }
     if (!/^image\/(png|jpeg|gif|webp|svg\+xml)$/.test(f.type)) { alert('Please choose a PNG, JPEG, GIF, WebP or SVG image.'); return; }
     const reader = new FileReader();
-    reader.onload = () => done(String(reader.result));
+    reader.onload = () => {
+      const url = String(reader.result);
+      if (f.type === 'image/svg+xml') {
+        if (url.length > MAX_LOGO_BYTES) alert('That SVG is too large. Please choose one under 1 MB.');
+        else done(url);
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, LOGO_HEIGHT / img.naturalHeight, LOGO_WIDTH / img.naturalWidth);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        let small = canvas.toDataURL('image/png');
+        if (small.length > MAX_LOGO_BYTES) small = canvas.toDataURL('image/webp', 0.9); // photo-like images: lossy, keeps transparency
+        if (small.length > MAX_LOGO_BYTES) alert('That image is too detailed to save. Please try a simpler one.');
+        else done(small);
+      };
+      img.onerror = () => alert('That image could not be read. Please try another file.');
+      img.src = url;
+    };
     reader.readAsDataURL(f);
   }
   function field(label, input, hint) {
