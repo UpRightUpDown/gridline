@@ -10,7 +10,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 };
 const MAX_QUESTION = 5000;
-const MAX_CONTEXT = 200000; // characters of rows, tables included
+const MAX_CONTEXT = 200000; // room for the calculator's rows, tables included, as they arrive in the JSON body
 const MAX_SKETCH = 30000; // characters of hand-drawn strokes in the request body
 const DEADLINE_MS = 150000;
 
@@ -58,7 +58,7 @@ export async function handle(request, client) {
   if (request.method !== 'POST') return reply('Method not allowed', 405);
 
   const text = await request.text();
-  if (text.length > MAX_QUESTION + MAX_CONTEXT + MAX_SKETCH) return json({ error: 'That question is too long.' }, 413);
+  if (text.length > MAX_QUESTION + MAX_CONTEXT + MAX_SKETCH) return json({ error: 'There is too much in the calculator to send with the question.' }, 413);
   let body;
   try { body = JSON.parse(text); } catch (e) { return json({ error: 'Not JSON' }, 400); }
   const question = body && typeof body.question === 'string' ? body.question.trim() : '';

@@ -71,9 +71,11 @@ test('describeItems sends every row, with tables written out row by row', () => 
   assert.deepStrictEqual(A.describeItems(items), [
     'a=2',
     '"data from class"',
-    'Table (each column is a list named by its header):\nx_{1} | y_{1}\n1 | 3\n2 | ',
-    'Table (each column is a list named by its header):\nx_{2}'
+    'Table (headers, then one row per line):\n["x_{1}","y_{1}"]\n["1","3"]\n["2",""]',
+    'Table (headers, then one row per line):\n["x_{2}"]'
   ]);
+  const bars = A.describeItems([{ type: 'table', columns: [{ latex: 'x_{1}', values: ['1 | 2'] }, { latex: 'y_{1}', values: ['3'] }] }]);
+  assert.strictEqual(bars[0].split('\n')[2], '["1 | 2","3"]');
   const many = Array.from({ length: 150 }, (_, i) => ({ type: 'expression', latex: 'a_{' + i + '}=' + i }));
   assert.strictEqual(A.describeItems(many).length, 150);
 });

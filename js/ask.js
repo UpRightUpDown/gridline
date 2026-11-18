@@ -36,7 +36,8 @@
   }
 
   // The rows already in the calculator, as text for Claude: expressions as LaTeX, notes in quotes,
-  // and tables as a header line of column names followed by one line per row of values.
+  // and tables as a JSON array of column headers followed by one JSON array of cells per row, so a
+  // cell holding | or a comma stays one cell.
   function describeItems(items) {
     return items.map(i => {
       if (i.type === 'note') return i.text ? '"' + i.text + '"' : '';
@@ -45,9 +46,9 @@
       const n = Math.max(0, ...cols.map(c => c.values.length));
       let last = n;
       while (last > 0 && !cols.some(c => (c.values[last - 1] || '').trim())) last--;
-      const lines = [cols.map(c => c.latex || '').join(' | ')];
-      for (let r = 0; r < last; r++) lines.push(cols.map(c => (c.values[r] || '').trim()).join(' | '));
-      return 'Table (each column is a list named by its header):\n' + lines.join('\n');
+      const lines = [JSON.stringify(cols.map(c => c.latex || ''))];
+      for (let r = 0; r < last; r++) lines.push(JSON.stringify(cols.map(c => (c.values[r] || '').trim())));
+      return 'Table (headers, then one row per line):\n' + lines.join('\n');
     }).filter(Boolean);
   }
 
