@@ -259,6 +259,8 @@
     mq.latex(it.latex || '');
     suppressEdit = false;
     row.mq = mq;
+    // Shift+Enter sends the row to Claude; capture it before MathQuill sees Enter.
+    mqEl.addEventListener('keydown', e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); askClaude(it); } }, true);
     mqEl.addEventListener('focusin', () => { lastFocusedMQ = { mq, it }; setSelected(it.id); row.el.classList.add('focused'); showKeypadTarget(); });
     mqEl.addEventListener('focusout', () => { row.el.classList.remove('focused'); });
     return row;
@@ -271,6 +273,7 @@
     ta.addEventListener('input', () => { it.text = ta.value; autosize(); commit(); });
     ta.addEventListener('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); insertAfter(it.id, newItem('expression'), true); }
+      if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); askClaude(it); }
       if (e.key === 'Backspace' && !ta.value) { e.preventDefault(); const i = indexOf(it.id); const prev = state.items[i - 1]; deleteItem(it.id); focusItem(prev && prev.id, true); }
       if (e.key === 'ArrowUp' && ta.selectionStart === 0) { e.preventDefault(); focusSibling(it.id, -1); }
       if (e.key === 'ArrowDown' && ta.selectionEnd === ta.value.length) { e.preventDefault(); focusSibling(it.id, 1); }
@@ -554,6 +557,31 @@
     commit(true);
     refresh();
     if (focus) focusItem(item.id);
+  }
+  // Ask Claude about a row and put its step-by-step answer in the rows below it.
+  function askClaude(it) {
+    const question = ((it.type === 'note' ? it.text : it.latex) || '').trim();
+    if (!question) return;
+    const wait = newItem('note', { text: 'Asking Claude…' });
+    insertAfter(it.id, wait, false);
+    const context = state.items.filter(i => i !== it && i !== wait)
+      .map(i => i.type === 'note' ? (i.text ? '"' + i.text + '"' : '') : i.latex).filter(Boolean).slice(0, 100);
+    window.GAsk.ask(question, context).then(steps => {
+      const at = indexOf(wait.id);
+      if (at < 0) return; // the waiting row was deleted, so the answer is no longer wanted
+      const added = steps.map(s => s.type === 'note' ? newItem('note', { text: s.content }) : newItem('expression', { latex: s.content }));
+      state.items.splice(at, 1, ...added);
+      renderList();
+      // keep the stored LaTeX the same as what MathQuill shows
+      added.forEach(a => { const r = rows.get(a.id); if (r && r.mq) a.latex = r.mq.latex(); });
+      commit(true);
+      refresh();
+    }, err => {
+      const r = rows.get(wait.id);
+      if (!r) return;
+      r.ta.value = err.message;
+      r.ta.dispatchEvent(new Event('input'));
+    });
   }
   function deleteItem(id) {
     const i = indexOf(id);
