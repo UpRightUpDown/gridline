@@ -20,7 +20,9 @@
     powered: 'gridline'
   };
   const DEFAULT_LOGO = 'assets/logo.svg';
-  const MAX_LOGO_BYTES = 1024 * 1024;
+  const MAX_LOGO_BYTES = 1024 * 1024; // size of a saved image's data: URL
+  const LOGO_HEIGHT = 176;             // 4x the tallest an image is shown, for sharp high-DPI screens
+  const LOGO_WIDTH = 1600;
   const HEX = /^#[0-9a-f]{6}$/i;
   const IMAGE_URL = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,/;
   const REMOTE = 'https://gridline-settings.uprightupdown.workers.dev/branding';
@@ -125,15 +127,42 @@
 
   // ------------------------------------------------------------ panel
   let panel = null;
-  // read a chosen image file as a data: URL, after checking its size and type
-  function readImage(input, done) {
+  // Read a chosen image file as a data: URL. The top bar shows images at most
+  // 44px tall, so a large photo or PNG is scaled down to LOGO_HEIGHT first;
+  // that keeps the saved settings small enough for browser storage and the worker.
+  // A newer upload, "Use default", "Remove" or a reset cancels a read still in progress.
+  const uploadGen = { logo: 0, center: 0 }; // one counter per image slot
+  function readImage(slot, input, done) {
     const f = input.files[0];
     input.value = '';
     if (!f) return;
-    if (f.size > MAX_LOGO_BYTES) { alert('Please choose an image under 1 MB.'); return; }
     if (!/^image\/(png|jpeg|gif|webp|svg\+xml)$/.test(f.type)) { alert('Please choose a PNG, JPEG, GIF, WebP or SVG image.'); return; }
+    if (f.type === 'image/svg+xml' && f.size > MAX_LOGO_BYTES) { alert('Please choose an SVG under 1 MB.'); return; }
+    const gen = ++uploadGen[slot];
+    const finish = url => { if (gen === uploadGen[slot]) done(url); };
     const reader = new FileReader();
-    reader.onload = () => done(String(reader.result));
+    reader.onload = () => {
+      const url = String(reader.result);
+      if (f.type === 'image/svg+xml') { finish(url); return; }
+      const img = new Image();
+      img.onload = () => {
+        let scale = Math.min(1, LOGO_HEIGHT / img.naturalHeight, LOGO_WIDTH / img.naturalWidth);
+        const canvas = document.createElement('canvas');
+        for (;;) {
+          canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          let small = canvas.toDataURL('image/png');
+          if (small.length > MAX_LOGO_BYTES) small = canvas.toDataURL('image/webp', 0.9); // lossy, keeps transparency
+          if (small.length <= MAX_LOGO_BYTES) { finish(small); return; }
+          // still too big (for example no WebP encoder): try again at half the size, down to the shown height
+          if (canvas.height <= 44) { alert('That image is too detailed to save. Please try a simpler one.'); return; }
+          scale /= 2;
+        }
+      };
+      img.onerror = () => alert('That image could not be read. Please try another file.');
+      img.src = url;
+    };
     reader.readAsDataURL(f);
   }
   function field(label, input, hint) {
@@ -191,10 +220,10 @@
     const syncPrev = () => { prev.src = brand.logo || DEFAULT_LOGO; prev.style.background = brand.barColor; };
     syncPrev();
     upload.addEventListener('click', () => file.click());
-    file.addEventListener('change', () => readImage(file, url => {
+    file.addEventListener('change', () => readImage('logo', file, url => {
       brand.logo = url; sanitize(brand); brand.showLogo = true; showCb.checked = true; apply(); save(); syncPrev();
     }));
-    def.addEventListener('click', () => { brand.logo = ''; apply(); save(); syncPrev(); });
+    def.addEventListener('click', () => { uploadGen.logo++; brand.logo = ''; apply(); save(); syncPrev(); });
     showCb.addEventListener('change', () => { brand.showLogo = showCb.checked; apply(); save(); });
     logoBox.append(prev, upload, def, file, show);
 
@@ -228,8 +257,8 @@
     };
     syncCenter();
     cUpload.addEventListener('click', () => cFile.click());
-    cFile.addEventListener('change', () => readImage(cFile, url => { brand.centerIcon = url; sanitize(brand); apply(); save(); syncCenter(); }));
-    cRemove.addEventListener('click', () => { brand.centerIcon = ''; apply(); save(); syncCenter(); });
+    cFile.addEventListener('change', () => readImage('center', cFile, url => { brand.centerIcon = url; sanitize(brand); apply(); save(); syncCenter(); }));
+    cRemove.addEventListener('click', () => { uploadGen.center++; brand.centerIcon = ''; apply(); save(); syncCenter(); });
     cSize.addEventListener('input', () => { brand.centerSize = Number(cSize.value); apply(); save(); });
     cBox.append(cPrev, cUpload, cRemove, cFile, cSizeLbl);
 
@@ -251,6 +280,7 @@
     panel.querySelector('.bp-done').addEventListener('click', close);
     panel.querySelector('.bp-reset').addEventListener('click', () => {
       if (!confirm('Reset the top bar, logo and text to the defaults?')) return;
+      uploadGen.logo++; uploadGen.center++;
       brand = Object.assign({}, DEFAULTS); apply(); save(); close(); open();
     });
     panel.addEventListener('mousedown', e => { if (e.target === panel) close(); });
