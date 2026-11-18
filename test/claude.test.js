@@ -8,7 +8,7 @@ const askReq = body => new Request('https://example.test/ask', { method: 'POST',
 // Stands in for the Anthropic SDK client at the network boundary.
 const fakeClient = reply => {
   const calls = [];
-  return { calls, beta: { messages: { create: async params => { calls.push(params); if (reply instanceof Error) throw reply; return reply; } } } };
+  return { calls, beta: { messages: { create: async (params, opts) => { calls.push(params); calls.opts = opts; if (reply instanceof Error) throw reply; return reply; } } } };
 };
 const answer = steps => ({ stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify({ steps }) }] });
 
@@ -24,6 +24,7 @@ test('ask sends the question and rows to Claude and returns its steps', async ()
   assert.strictEqual(p.output_config.format.type, 'json_schema');
   assert.match(p.messages[0].content, /what is a/);
   assert.match(p.messages[0].content, /b=2/);
+  assert.ok(client.calls.opts.signal instanceof AbortSignal);
 });
 
 test('ask reports a refusal or an API failure as an error', async () => {
@@ -52,4 +53,15 @@ test('the system prompt keeps its LaTeX backslashes', async () => {
   assert.ok(SYSTEM.includes(String.raw`\frac{d}{dx}`));
   assert.ok(SYSTEM.includes(String.raw`\theta`));
   assert.doesNotMatch(SYSTEM, /[\f\t\b\v]/);
+});
+
+test('ask reads the final answer after a fallback and lower-cases step types', async () => {
+  const { handle } = await load();
+  const client = fakeClient({ stop_reason: 'end_turn', content: [
+    { type: 'text', text: '{"steps":[{"type":"note","content":"Let' },
+    { type: 'fallback', from: { model: 'a' }, to: { model: 'b' } },
+    { type: 'text', text: JSON.stringify({ steps: [{ type: 'Expression', content: 'a=1' }] }) }
+  ] });
+  const res = await handle(askReq({ question: 'q' }), client);
+  assert.deepStrictEqual(await res.json(), { steps: [{ type: 'expression', content: 'a=1' }] });
 });

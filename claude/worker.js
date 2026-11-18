@@ -11,6 +11,7 @@ const CORS = {
 };
 const MAX_QUESTION = 5000;
 const MAX_CONTEXT = 20000;
+const DEADLINE_MS = 150000;
 
 export const SYSTEM = String.raw`You answer questions inside Gridline, a Desmos-style graphing calculator. Your answer appears as rows in its expression list, in order, right under the question. Work the problem out step by step, one row per step.
 
@@ -73,15 +74,17 @@ export async function handle(request, client) {
       system: SYSTEM,
       output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
       messages: [{ role: 'user', content: prompt }]
-    });
+    }, { signal: AbortSignal.timeout(DEADLINE_MS) }); // one deadline across the SDK's retries
   } catch (e) {
     console.error(e);
     return json({ error: 'Claude could not answer right now. Try again in a moment.' }, 502);
   }
   if (message.stop_reason === 'refusal') return json({ error: 'Claude declined to answer that.' }, 502);
-  const out = message.content.find(b => b.type === 'text');
+  // the last text block is the final answer, even if a refusal fallback ran mid-answer
+  const out = message.content.filter(b => b.type === 'text').at(-1);
   try {
-    return json({ steps: JSON.parse(out.text).steps }, 200);
+    const steps = JSON.parse(out.text).steps.map(s => ({ type: String(s.type).toLowerCase(), content: s.content }));
+    return json({ steps }, 200);
   } catch (e) {
     console.error('Unreadable answer', message.stop_reason);
     return json({ error: 'Claude could not answer right now. Try again in a moment.' }, 502);
