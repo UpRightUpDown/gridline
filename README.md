@@ -17,6 +17,14 @@ It handles:
 
 Ctrl+Shift+` opens the Appearance panel, which sets the top bar's colours, logo, name and text. These settings are shared by every device: the page keeps them in a small Cloudflare Worker (`worker/`, deployed as `gridline-settings`), and changes reach other devices the next time they load the page or come back to the tab. Deploy the worker with `npx wrangler deploy` from `worker/`.
 
+## Asking Claude
+
+Type a question into any row and press Shift+Enter. Claude answers step by step in new rows under it: expressions you can see and graph, with short notes between them. While it works, the row under the question says "Asking Claude…"; if it fails, that row says why.
+
+Questions go to a second Cloudflare Worker (`claude/worker.js`, deployed as `gridline-claude`), which asks Claude Opus 5.5 through the Claude API. It runs entirely in the cloud; nothing needs to be running on anyone's computer. Asking is open to anyone who has the page, and each question is billed to the API key stored as the worker's `ANTHROPIC_API_KEY` secret. Set the key with `npx wrangler secret put ANTHROPIC_API_KEY` and deploy with `npx wrangler deploy`, both from `claude/`.
+
+Install dependencies with `npm install` before running the tests or deploying.
+
 Math input uses [MathQuill](http://mathquill.com) (MPL-2.0) and jQuery (MIT), both in `vendor/`.
 
 Run the tests with `npm test`.

@@ -46,8 +46,10 @@
     } catch (e) { /* storage unavailable */ }
     return null;
   }
+  // Rows waiting for Claude are left out of saved state and undo history.
+  const savedItems = () => state.items.filter(i => !i.pending);
   function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(Object.assign({}, state, { items: savedItems() }))); } catch (e) { /* ignore */ }
   }
   function nextColor() { const c = COLORS[state.colorIdx % 5]; state.colorIdx++; return c; }
   function newItem(type, extra) {
@@ -67,7 +69,7 @@
     save();
     clearTimeout(histTimer);
     const push = () => {
-      const snap = JSON.stringify(state.items);
+      const snap = JSON.stringify(savedItems());
       if (snap === history[histIndex]) return;
       history = history.slice(0, histIndex + 1);
       history.push(snap);
@@ -79,7 +81,7 @@
   }
   function undo() {
     clearTimeout(histTimer);
-    const snap = JSON.stringify(state.items);
+    const snap = JSON.stringify(savedItems());
     if (snap !== history[histIndex]) { history = history.slice(0, histIndex + 1); history.push(snap); histIndex++; }
     if (histIndex <= 0) return;
     histIndex--;
@@ -98,7 +100,7 @@
     updateUndoButtons();
   }
   function updateUndoButtons() {
-    $('#btn-undo').disabled = histIndex <= 0 && JSON.stringify(state.items) === history[histIndex];
+    $('#btn-undo').disabled = histIndex <= 0 && JSON.stringify(savedItems()) === history[histIndex];
     $('#btn-redo').disabled = histIndex >= history.length - 1;
   }
 
@@ -259,6 +261,8 @@
     mq.latex(it.latex || '');
     suppressEdit = false;
     row.mq = mq;
+    // Shift+Enter sends the row to Claude; capture it before MathQuill sees Enter.
+    mqEl.addEventListener('keydown', e => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); e.stopPropagation(); askClaude(it); } }, true);
     mqEl.addEventListener('focusin', () => { lastFocusedMQ = { mq, it }; setSelected(it.id); row.el.classList.add('focused'); showKeypadTarget(); });
     mqEl.addEventListener('focusout', () => { row.el.classList.remove('focused'); });
     return row;
@@ -271,6 +275,7 @@
     ta.addEventListener('input', () => { it.text = ta.value; autosize(); commit(); });
     ta.addEventListener('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); insertAfter(it.id, newItem('expression'), true); }
+      if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); askClaude(it); }
       if (e.key === 'Backspace' && !ta.value) { e.preventDefault(); const i = indexOf(it.id); const prev = state.items[i - 1]; deleteItem(it.id); focusItem(prev && prev.id, true); }
       if (e.key === 'ArrowUp' && ta.selectionStart === 0) { e.preventDefault(); focusSibling(it.id, -1); }
       if (e.key === 'ArrowDown' && ta.selectionEnd === ta.value.length) { e.preventDefault(); focusSibling(it.id, 1); }
@@ -555,6 +560,53 @@
     refresh();
     if (focus) focusItem(item.id);
   }
+  // Ask Claude about a row and put its step-by-step answer in the rows below it.
+  function askClaude(it) {
+    const question = ((it.type === 'note' ? it.text : it.latex) || '').trim();
+    if (!question) return;
+    commit(true); // the question gets its own undo step, separate from the answer
+    const wait = newItem('note', { text: 'Asking Claude…', pending: true });
+    state.items.splice(indexOf(it.id) + 1, 0, wait);
+    const waitRow = makeRow(wait);
+    rows.get(it.id).el.after(waitRow.el);
+    refresh();
+    const context = savedItems().filter(i => i !== it)
+      .map(i => i.type === 'note' ? (i.text ? '"' + i.text + '"' : '') : i.latex).filter(Boolean).slice(0, 100);
+    window.GAsk.ask(question, context).then(steps => {
+      const at = indexOf(wait.id);
+      if (at < 0) return; // the waiting row was deleted or undone away, so the answer is no longer wanted
+      const added = steps.map(s => s.type === 'note' ? newItem('note', { text: s.content }) : newItem('expression', { latex: s.content }));
+      state.items.splice(at, 1, ...added);
+      const original = new Map();
+      for (const a of added) {
+        const r = makeRow(a);
+        waitRow.el.before(r.el);
+        if (r.mq) { original.set(a.id, a.latex); a.latex = r.mq.latex(); } // keep the stored LaTeX the same as what MathQuill shows
+      }
+      // a row the calculator cannot read at all is shown as text instead of an error
+      let checked = new Map();
+      try { checked = build(savedItems()).byId; } catch (e) { console.error(e); }
+      for (const a of added) {
+        const err = a.type === 'expression' && (checked.get(a.id) || {}).error;
+        if (!err || !/^Unsupported command/.test(err)) continue;
+        const old = rows.get(a.id);
+        a.type = 'note'; a.text = original.get(a.id); delete a.latex;
+        old.el.replaceWith(makeRow(a).el);
+      }
+      waitRow.el.remove();
+      rows.delete(wait.id);
+      commit(true);
+      refresh();
+    }, err => {
+      if (indexOf(wait.id) < 0) return;
+      // the waiting row becomes an ordinary note that says what went wrong
+      delete wait.pending;
+      waitRow.ta.value = err.message;
+      waitRow.ta.dispatchEvent(new Event('input'));
+      commit(true);
+    });
+  }
+
   function deleteItem(id) {
     const i = indexOf(id);
     if (i < 0) return;
