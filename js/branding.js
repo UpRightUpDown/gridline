@@ -1,6 +1,7 @@
 /* Branding panel: change the top bar colour, logo, name, header text and
- * "powered by" text. Open it with Ctrl+Shift+` (Cmd+Shift+` on a Mac). Saved in this
- * browser's local storage, separately from the graph. */
+ * "powered by" text. Open it with Ctrl+Shift+` (Cmd+Shift+` on a Mac). Settings are
+ * shared by every device through the worker in worker/, and cached in this browser's
+ * local storage so the page shows them before the shared copy arrives. */
 (function () {
   'use strict';
   const KEY = 'gridline-branding-v1';
@@ -22,8 +23,13 @@
   const MAX_LOGO_BYTES = 1024 * 1024;
   const HEX = /^#[0-9a-f]{6}$/i;
   const IMAGE_URL = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,/;
+  const REMOTE = 'https://gridline-settings.uprightupdown.workers.dev/branding';
+  const PUSH_DELAY = 800;
 
   let brand = load();
+  let edited = false;     // changed here since the last shared copy arrived
+  let pushTimer = null;
+  let warned = false;
 
   function load() {
     try {
@@ -32,9 +38,41 @@
     } catch (e) { /* storage unavailable or corrupt */ }
     return Object.assign({}, DEFAULTS);
   }
+  function cache() {
+    try { localStorage.setItem(KEY, JSON.stringify(brand)); return true; }
+    catch (e) { return false; }
+  }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(brand)); }
-    catch (e) { alert('Could not save the branding. The logo may be too large for browser storage.'); }
+    edited = true;
+    cache();
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(push, PUSH_DELAY);
+  }
+  // send the settings to the shared store, a moment after the last change
+  function push() {
+    clearTimeout(pushTimer);
+    pushTimer = null;
+    fetch(REMOTE, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(brand) })
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); edited = false; })
+      .catch(() => {
+        if (warned) return;
+        warned = true;
+        alert('Could not save the appearance for other devices. The change shows on this device only.');
+      });
+  }
+  // fetch the shared settings, unless there are changes here still to send
+  function pull() {
+    if (panel || pushTimer || edited) return;
+    fetch(REMOTE, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data || typeof data !== 'object' || !Object.keys(data).length) return;
+        if (panel || pushTimer || edited) return;
+        brand = sanitize(Object.assign({}, DEFAULTS, data));
+        cache();
+        apply();
+      })
+      .catch(() => { /* offline or blocked: keep the cached settings */ });
   }
   function sanitize(b) {
     if (!HEX.test(b.barColor)) b.barColor = DEFAULTS.barColor;
@@ -224,6 +262,7 @@
     if (!panel) return;
     panel.remove();
     panel = null;
+    if (pushTimer) push();
   }
 
   // ------------------------------------------------------------ shortcut: Ctrl+Shift+` (Cmd+Shift+` on a Mac)
@@ -238,5 +277,7 @@
   }, true);
 
   apply();
+  pull();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });
   window.__branding = { open, close, get: () => Object.assign({}, brand) };
 })();
