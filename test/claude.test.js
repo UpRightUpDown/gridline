@@ -94,3 +94,15 @@ test('ask leaves the drawing section out when nothing was drawn', async () => {
   await handle(askReq({ question: 'q', sketches: [] }), client);
   assert.doesNotMatch(client.calls[0].messages[0].content, /drew|Stroke/);
 });
+
+test('ask passes on every row, including a long table', async () => {
+  const { handle } = await load();
+  const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));
+  const rows = Array.from({ length: 150 }, (_, i) => 'a_{' + i + '}=' + i);
+  const table = 'Table (each column is a list named by its header):\nx_{1} | y_{1}\n' + Array.from({ length: 2000 }, (_, i) => i + ' | ' + i * i).join('\n');
+  const res = await handle(askReq({ question: 'q', context: rows.concat(table) }), client);
+  assert.strictEqual(res.status, 200);
+  const prompt = client.calls[0].messages[0].content;
+  assert.match(prompt, /a_\{149\}=149/);
+  assert.match(prompt, /1999 \| 3996001/);
+});

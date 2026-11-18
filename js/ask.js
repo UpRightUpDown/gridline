@@ -35,6 +35,22 @@
       .slice(0, MAX_STEPS);
   }
 
+  // The rows already in the calculator, as text for Claude: expressions as LaTeX, notes in quotes,
+  // and tables as a header line of column names followed by one line per row of values.
+  function describeItems(items) {
+    return items.map(i => {
+      if (i.type === 'note') return i.text ? '"' + i.text + '"' : '';
+      if (i.type !== 'table') return i.latex || '';
+      const cols = i.columns || [];
+      const n = Math.max(0, ...cols.map(c => c.values.length));
+      let last = n;
+      while (last > 0 && !cols.some(c => (c.values[last - 1] || '').trim())) last--;
+      const lines = [cols.map(c => c.latex || '').join(' | ')];
+      for (let r = 0; r < last; r++) lines.push(cols.map(c => (c.values[r] || '').trim()).join(' | '));
+      return 'Table (each column is a list named by its header):\n' + lines.join('\n');
+    }).filter(Boolean);
+  }
+
   async function ask(question, context, fetchImpl, sketches) {
     const doFetch = fetchImpl || root.fetch.bind(root);
     const body = { question, context };
@@ -53,7 +69,7 @@
     return steps;
   }
 
-  const api = { ASK_URL, MAX_SKETCH_POINTS, ask, cleanSteps, cleanSketches };
+  const api = { ASK_URL, MAX_SKETCH_POINTS, ask, cleanSteps, cleanSketches, describeItems };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GAsk = api;
 })(typeof window !== 'undefined' ? window : globalThis);

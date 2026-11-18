@@ -10,7 +10,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 };
 const MAX_QUESTION = 5000;
-const MAX_CONTEXT = 20000;
+const MAX_CONTEXT = 200000; // characters of rows, tables included
 const MAX_SKETCH = 30000; // characters of hand-drawn strokes in the request body
 const DEADLINE_MS = 150000;
 
@@ -64,7 +64,7 @@ export async function handle(request, client) {
   const question = body && typeof body.question === 'string' ? body.question.trim() : '';
   if (!question) return json({ error: 'Type a question first.' }, 400);
   if (question.length > MAX_QUESTION) return json({ error: 'That question is too long.' }, 413);
-  const context = Array.isArray(body.context) ? body.context.filter(c => typeof c === 'string').slice(0, 100) : [];
+  const context = Array.isArray(body.context) ? body.context.filter(c => typeof c === 'string') : [];
   const sketches = (Array.isArray(body.sketches) ? body.sketches : [])
     .filter(s => Array.isArray(s) && s.length && s.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))
     .slice(0, 40);

@@ -631,8 +631,7 @@
     if (next) focusItem(next.id);
     commit(true);
     refresh();
-    const context = savedItems()
-      .map(i => i.type === 'note' ? (i.text ? '"' + i.text + '"' : '') : i.latex).filter(Boolean).slice(0, 100);
+    const context = window.GAsk.describeItems(savedItems());
     const sketches = graph.takeSketches();
     window.GAsk.ask(question, context, null, sketches).then(steps => {
       const at = indexOf(wait.id);
