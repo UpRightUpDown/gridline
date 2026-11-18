@@ -31,7 +31,7 @@ button { font-family: inherit; cursor: pointer; }
   display: flex; align-items: center; padding: 0 0 0 10px; gap: 14px; font: 300 17.6px var(--light);
 }
 .brand { display: flex; align-items: center; gap: 7px; color: #fff; text-decoration: none; }
-.wordmark { font-size: 21px; font-weight: 600; letter-spacing: -0.3px; }
+.wordmark { font-size: 15.84px; font-weight: 600; }
 .topbar-sep { width: 1px; height: 22px; background: rgba(255, 255, 255, 0.45); }
 .topbar-title { font-size: 15.84px; font-weight: 300; }
 
@@ -429,7 +429,7 @@ body.keypad-open .kp-toggle { visibility: hidden; }
 }
 .topbar-center { width: auto; max-width: 200px; object-fit: contain; }
 /* same type as the "powered by" name */
-.topbar-center-text { font: 600 20px Arial, sans-serif; letter-spacing: -0.3px; }
+.topbar-center-text { font: 700 22px Arial, sans-serif; letter-spacing: -0.3px; }
 .bp-inline { display: flex; align-items: center; gap: 12px; }
 .bp-inline input[type="text"] { flex: 1; }
 .bp-logo input[type="range"] { width: 90px; vertical-align: middle; }
