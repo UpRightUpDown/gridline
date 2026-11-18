@@ -145,8 +145,50 @@
     onDragPoint(info, x, y) {
       if (info.x) setSliderValue(info.xItem, info.x, x);
       if (info.y) setSliderValue(info.yItem, info.y, y);
-    }
+    },
+    onSketchStart() { heldZ = null; } // the Z press was for drawing, not typing
   });
+  // Hold Z over the graph and drag to draw. The strokes go to Claude with the next question.
+  // A Z pressed over the graph is held back: if no drawing starts, it is typed after all,
+  // when Z comes up or just before the next key.
+  let heldZ = null; // { key, target }
+  let zDown = false; // a Z pressed over the graph is still down
+  function typeHeldZ() {
+    const z = heldZ; heldZ = null;
+    if (!z || document.activeElement !== z.target) return;
+    const field = z.target.closest && z.target.closest('.mq-field');
+    if (field) { const mq = MQ(field); if (mq) mq.typedText(z.key); return; }
+    if (z.target.setRangeText && typeof z.target.selectionStart === 'number') {
+      z.target.setRangeText(z.key, z.target.selectionStart, z.target.selectionEnd, 'end');
+      z.target.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+  window.addEventListener('keydown', e => {
+    const plainZ = e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
+    if (!plainZ) {
+      if (/^(Shift|Control|Alt|Meta|CapsLock)$/.test(e.key) || !heldZ) return;
+      // another key while Z is down means typing: put the z in first, and stop drawing
+      typeHeldZ();
+      graph.setDrawKey(false);
+      return;
+    }
+    if (e.repeat) {
+      if (zDown) { e.preventDefault(); e.stopPropagation(); } // no row of z's
+      return;
+    }
+    if (!graph.hovering) return;
+    e.preventDefault(); e.stopPropagation();
+    heldZ = { key: e.key, target: document.activeElement };
+    zDown = true;
+    graph.setDrawKey(true);
+  }, true);
+  window.addEventListener('keyup', e => {
+    if (e.key.toLowerCase() !== 'z' || !zDown) return;
+    typeHeldZ();
+    zDown = false;
+    graph.setDrawKey(false);
+  });
+  window.addEventListener('blur', () => { heldZ = null; zDown = false; graph.setDrawKey(false); });
   graph.setSettings(state.settings);
   GM.settings.degrees = !!state.settings.degrees;
 
@@ -167,10 +209,13 @@
     try { lastResult = build(state.items); }
     catch (e) { console.error(e); lastResult = { byId: new Map(), graphs: [] }; }
     const graphed = new Set(lastResult.graphs.map(g => g.id));
-    state.items.forEach((it, i) => {
+    let num = 0;
+    state.items.forEach(it => {
+      if (it.pending) return; // hidden placeholder for a question sent to Claude
+      num++;
       const row = rows.get(it.id);
       if (!row) return;
-      row.num.textContent = i + 1;
+      row.num.textContent = num;
       decorate(it, row, lastResult.byId.get(it.id) || {}, graphed.has(it.id));
     });
     graph.setGraphs(lastResult.graphs, selectedId);
@@ -560,21 +605,38 @@
     refresh();
     if (focus) focusItem(item.id);
   }
-  // Ask Claude about a row and put its step-by-step answer in the rows below it.
+  // Send a row to Claude: the row disappears at once and the answer later fills its place.
   function askClaude(it) {
     const question = ((it.type === 'note' ? it.text : it.latex) || '').trim();
     if (!question) return;
     commit(true); // the question gets its own undo step, separate from the answer
-    const wait = newItem('note', { text: 'Asking Claude…', pending: true });
-    state.items.splice(indexOf(it.id) + 1, 0, wait);
+    // a hidden placeholder holds the question's place until the answer comes back
+    const wait = newItem('note', { pending: true });
+    const at0 = indexOf(it.id);
+    state.items.splice(at0, 1, wait);
     const waitRow = makeRow(wait);
-    rows.get(it.id).el.after(waitRow.el);
+    waitRow.el.style.display = 'none';
+    const qRow = rows.get(it.id);
+    qRow.el.replaceWith(waitRow.el);
+    rows.delete(it.id);
+    if (lastFocusedMQ && lastFocusedMQ.it === it) lastFocusedMQ = null;
+    if (selectedId === it.id) setSelected(null);
+    const last = state.items[state.items.length - 1];
+    if (last === wait || last.type !== 'expression' || last.latex) {
+      const n = newItem('expression');
+      state.items.push(n);
+      listEl.appendChild(makeRow(n).el);
+    }
+    const next = state.items[at0 + 1];
+    if (next) focusItem(next.id);
+    commit(true);
     refresh();
-    const context = savedItems().filter(i => i !== it)
+    const context = savedItems()
       .map(i => i.type === 'note' ? (i.text ? '"' + i.text + '"' : '') : i.latex).filter(Boolean).slice(0, 100);
-    window.GAsk.ask(question, context).then(steps => {
+    const sketches = graph.takeSketches();
+    window.GAsk.ask(question, context, null, sketches).then(steps => {
       const at = indexOf(wait.id);
-      if (at < 0) return; // the waiting row was deleted or undone away, so the answer is no longer wanted
+      if (at < 0) return; // the placeholder was undone away, so the answer is no longer wanted
       const added = steps.map(s => s.type === 'note' ? newItem('note', { text: s.content }) : newItem('expression', { latex: s.content }));
       state.items.splice(at, 1, ...added);
       const original = new Map();
@@ -598,12 +660,15 @@
       commit(true);
       refresh();
     }, err => {
-      if (indexOf(wait.id) < 0) return;
-      // the waiting row becomes an ordinary note that says what went wrong
-      delete wait.pending;
-      waitRow.ta.value = err.message;
-      waitRow.ta.dispatchEvent(new Event('input'));
+      console.error(err);
+      const at = indexOf(wait.id);
+      if (at < 0) return;
+      // put the question back where it was so it is not lost
+      state.items.splice(at, 1, it);
+      waitRow.el.replaceWith(makeRow(it).el);
+      rows.delete(wait.id);
       commit(true);
+      refresh();
     });
   }
 

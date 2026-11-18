@@ -5,6 +5,25 @@
   const ASK_URL = 'https://gridline-claude.uprightupdown.workers.dev/ask';
   const MAX_STEPS = 40;
   const MAX_LEN = 2000;
+  const MAX_SKETCHES = 40;
+  const MAX_SKETCH_POINTS = 800; // shared by all strokes
+
+  // Hand-drawn strokes as [[x, y], ...] in graph coordinates: rounded, and each thinned to evenly
+  // spaced points that keep both ends, so all strokes together fit in MAX_SKETCH_POINTS.
+  // A one-point stroke is a dot and is kept.
+  function cleanSketches(strokes) {
+    if (!Array.isArray(strokes)) return [];
+    const round = v => Number(v.toPrecision(6));
+    const kept = strokes
+      .map(s => Array.isArray(s) ? s.filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) : [])
+      .filter(s => s.length)
+      .slice(0, MAX_SKETCHES);
+    const each = Math.floor(MAX_SKETCH_POINTS / Math.max(kept.length, 1));
+    return kept.map(s => {
+      const n = Math.min(s.length, each);
+      return Array.from({ length: n }, (_, i) => s[n === 1 ? 0 : Math.round(i * (s.length - 1) / (n - 1))]).map(p => [round(p[0]), round(p[1])]);
+    });
+  }
 
   // Keep only rows the expression list can show.
   function cleanSteps(steps) {
@@ -16,11 +35,14 @@
       .slice(0, MAX_STEPS);
   }
 
-  async function ask(question, context, fetchImpl) {
+  async function ask(question, context, fetchImpl, sketches) {
     const doFetch = fetchImpl || root.fetch.bind(root);
+    const body = { question, context };
+    const drawn = cleanSketches(sketches);
+    if (drawn.length) body.sketches = drawn;
     let res, data = {};
     try {
-      res = await doFetch(ASK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, context }) });
+      res = await doFetch(ASK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     } catch (e) {
       throw new Error('Could not reach Claude. Check the connection and try again.');
     }
@@ -31,7 +53,7 @@
     return steps;
   }
 
-  const api = { ASK_URL, ask, cleanSteps };
+  const api = { ASK_URL, MAX_SKETCH_POINTS, ask, cleanSteps, cleanSketches };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GAsk = api;
 })(typeof window !== 'undefined' ? window : globalThis);

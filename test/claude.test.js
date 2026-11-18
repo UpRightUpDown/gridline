@@ -65,3 +65,32 @@ test('ask reads the final answer after a fallback and lower-cases step types', a
   const res = await handle(askReq({ question: 'q' }), client);
   assert.deepStrictEqual(await res.json(), { steps: [{ type: 'expression', content: 'a=1' }] });
 });
+
+test('ask gives Claude the hand-drawn strokes as graph coordinates', async () => {
+  const { handle, SYSTEM } = await load();
+  const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));
+  const res = await handle(askReq({ question: 'what curve is this', sketches: [[[0, 0], [1, 1], [2, 4]], 'junk', [[1, 'x']]] }), client);
+  assert.strictEqual(res.status, 200);
+  const content = client.calls[0].messages[0].content;
+  assert.match(content, /Stroke 1: \(0, 0\) \(1, 1\) \(2, 4\)/);
+  assert.doesNotMatch(content, /Stroke 2/);
+  assert.match(SYSTEM, /hand-drawn/i);
+});
+
+test('ask passes on a dot and up to 40 strokes', async () => {
+  const { handle } = await load();
+  const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));
+  const strokes = [[[3, 4]], ...Array.from({ length: 45 }, (_, k) => [[k, 0], [k, 1]])];
+  await handle(askReq({ question: 'q', sketches: strokes }), client);
+  const content = client.calls[0].messages[0].content;
+  assert.match(content, /Stroke 1: \(3, 4\)\n/);
+  assert.match(content, /Stroke 40: /);
+  assert.doesNotMatch(content, /Stroke 41: /);
+});
+
+test('ask leaves the drawing section out when nothing was drawn', async () => {
+  const { handle } = await load();
+  const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));
+  await handle(askReq({ question: 'q', sketches: [] }), client);
+  assert.doesNotMatch(client.calls[0].messages[0].content, /drew|Stroke/);
+});
