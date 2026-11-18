@@ -21,6 +21,8 @@ Ctrl+Shift+` opens the Appearance panel, which sets the top bar's colours, logo,
 
 Type a question into any row and press Shift+Enter. The row disappears to show the question was sent, and a moment later Claude's answer appears in its place, step by step: expressions you can see and graph, with short notes between them. There is no waiting indicator. If the request fails, the question comes back so you can try again.
 
+To draw for Claude, point at the graph and tap Z. The cursor becomes a crosshair, and dragging draws instead of panning. Tap Z again or press Esc to stop. Your next question sends the drawing to Claude as points on the graph, and the drawing then clears. You can also hold Z while you drag with a mouse. A laptop touchpad needs the tap, because Windows ignores the touchpad while a key is held.
+
 Questions go to a second Cloudflare Worker (`claude/worker.js`, deployed as `gridline-claude`), which asks Claude Opus 5.5 through the Claude API. It runs entirely in the cloud; nothing needs to be running on anyone's computer. Asking is open to anyone who has the page, and each question is billed to the API key stored as the worker's `ANTHROPIC_API_KEY` secret. Set the key with `npx wrangler secret put ANTHROPIC_API_KEY` and deploy with `npx wrangler deploy`, both from `claude/`.
 
 Install dependencies with `npm install` before running the tests or deploying.

@@ -146,49 +146,35 @@
       if (info.x) setSliderValue(info.xItem, info.x, x);
       if (info.y) setSliderValue(info.yItem, info.y, y);
     },
-    onSketchStart() { heldZ = null; } // the Z press was for drawing, not typing
+    onSketchStart() { drewThisPress = true; }
   });
-  // Hold Z over the graph and drag to draw. The strokes go to Claude with the next question.
-  // A Z pressed over the graph is held back: if no drawing starts, it is typed after all,
-  // when Z comes up or just before the next key.
-  let heldZ = null; // { key, target }
-  let zDown = false; // a Z pressed over the graph is still down
-  function typeHeldZ() {
-    const z = heldZ; heldZ = null;
-    if (!z || document.activeElement !== z.target) return;
-    const field = z.target.closest && z.target.closest('.mq-field');
-    if (field) { const mq = MQ(field); if (mq) mq.typedText(z.key); return; }
-    if (z.target.setRangeText && typeof z.target.selectionStart === 'number') {
-      z.target.setRangeText(z.key, z.target.selectionStart, z.target.selectionEnd, 'end');
-      z.target.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }
+  // Draw on the graph for Claude. With the pointer over the graph, tap Z to turn drawing on
+  // (it stays on, so a touchpad works: Windows ignores the touchpad while a key is held), and tap Z
+  // again or press Esc to turn it off. Holding Z while dragging also works, and turns off on release.
+  // Sending a question takes the strokes and turns drawing off.
+  let zDown = false;      // a Z pressed over the graph is still down
+  let drewThisPress = false;
+  function stopDrawing() { zDown = false; graph.setDrawKey(false); }
   window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && graph.drawKey) { stopDrawing(); return; }
     const plainZ = e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
-    if (!plainZ) {
-      if (/^(Shift|Control|Alt|Meta|CapsLock)$/.test(e.key) || !heldZ) return;
-      // another key while Z is down means typing: put the z in first, and stop drawing
-      typeHeldZ();
-      graph.setDrawKey(false);
-      return;
-    }
+    if (!plainZ) return;
     if (e.repeat) {
       if (zDown) { e.preventDefault(); e.stopPropagation(); } // no row of z's
       return;
     }
-    if (!graph.hovering) return;
+    if (!graph.hovering) return; // elsewhere, Z types as usual
     e.preventDefault(); e.stopPropagation();
-    heldZ = { key: e.key, target: document.activeElement };
-    zDown = true;
+    if (graph.drawKey) { stopDrawing(); return; }
+    zDown = true; drewThisPress = false;
     graph.setDrawKey(true);
   }, true);
   window.addEventListener('keyup', e => {
     if (e.key.toLowerCase() !== 'z' || !zDown) return;
-    typeHeldZ();
     zDown = false;
-    graph.setDrawKey(false);
+    if (drewThisPress) graph.setDrawKey(false); // held while drawing: release ends it
   });
-  window.addEventListener('blur', () => { heldZ = null; zDown = false; graph.setDrawKey(false); });
+  window.addEventListener('blur', () => { if (zDown) stopDrawing(); });
   graph.setSettings(state.settings);
   GM.settings.degrees = !!state.settings.degrees;
 
@@ -634,6 +620,7 @@
     const context = savedItems()
       .map(i => i.type === 'note' ? (i.text ? '"' + i.text + '"' : '') : i.latex).filter(Boolean).slice(0, 100);
     const sketches = graph.takeSketches();
+    stopDrawing();
     window.GAsk.ask(question, context, null, sketches).then(steps => {
       const at = indexOf(wait.id);
       if (at < 0) return; // the placeholder was undone away, so the answer is no longer wanted
