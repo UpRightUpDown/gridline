@@ -66,8 +66,8 @@ export async function handle(request, client) {
   if (question.length > MAX_QUESTION) return json({ error: 'That question is too long.' }, 413);
   const context = Array.isArray(body.context) ? body.context.filter(c => typeof c === 'string').slice(0, 100) : [];
   const sketches = (Array.isArray(body.sketches) ? body.sketches : [])
-    .filter(s => Array.isArray(s) && s.length >= 2 && s.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))
-    .slice(0, 10);
+    .filter(s => Array.isArray(s) && s.length && s.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)))
+    .slice(0, 40);
   const drawing = sketches.map((s, i) => 'Stroke ' + (i + 1) + ': ' + s.map(([x, y]) => '(' + x + ', ' + y + ')').join(' ')).join('\n');
   const prompt = (context.length ? 'Rows already in the calculator:\n' + context.join('\n') + '\n\n' : '')
     + (drawing ? 'Strokes the person drew on the graph:\n' + drawing + '\n\n' : '')

@@ -77,6 +77,17 @@ test('ask gives Claude the hand-drawn strokes as graph coordinates', async () =>
   assert.match(SYSTEM, /hand-drawn/i);
 });
 
+test('ask passes on a dot and up to 40 strokes', async () => {
+  const { handle } = await load();
+  const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));
+  const strokes = [[[3, 4]], ...Array.from({ length: 45 }, (_, k) => [[k, 0], [k, 1]])];
+  await handle(askReq({ question: 'q', sketches: strokes }), client);
+  const content = client.calls[0].messages[0].content;
+  assert.match(content, /Stroke 1: \(3, 4\)\n/);
+  assert.match(content, /Stroke 40: /);
+  assert.doesNotMatch(content, /Stroke 41: /);
+});
+
 test('ask leaves the drawing section out when nothing was drawn', async () => {
   const { handle } = await load();
   const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));

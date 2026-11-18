@@ -119,7 +119,10 @@
       if (!this.pointers.size) this.canvas.style.cursor = on ? 'crosshair' : '';
     }
     // Hand the strokes over and clear them from the graph.
-    takeSketches() { const s = this.sketches; this.sketches = []; this.redraw(); return s; }
+    takeSketches() {
+      if (this.mode === 'sketch') this.mode = null; // a stroke still being drawn ends here
+      const s = this.sketches; this.sketches = []; this.redraw(); return s;
+    }
 
     setGraphs(graphs, selectedId) {
       this.graphs = graphs;

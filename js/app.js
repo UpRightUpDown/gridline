@@ -146,36 +146,40 @@
       if (info.x) setSliderValue(info.xItem, info.x, x);
       if (info.y) setSliderValue(info.yItem, info.y, y);
     },
-    onSketchStart() {
-      // pressing Z typed a "z" into the row that had focus; drawing means it was not meant as text
-      const f = zTypedInto; zTypedInto = null;
-      if (!f) return;
-      if (f.ta) {
-        const i = f.ta.selectionStart;
-        if (i > 0 && f.ta.selectionEnd === i && /z/i.test(f.ta.value[i - 1])) {
-          f.ta.setRangeText('', i - 1, i, 'end');
-          f.ta.dispatchEvent(new Event('input'));
-        }
-      } else if (f.mq && /z$/i.test(f.mq.latex())) f.mq.keystroke('Backspace');
-    }
+    onSketchStart() { heldZ = null; } // the Z press was for drawing, not typing
   });
-  // Hold Z and drag on the graph to draw. The strokes go to Claude with the next question.
-  let zTypedInto = null;
-  const isZ = e => e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
+  // Hold Z over the graph and drag to draw. The strokes go to Claude with the next question.
+  // A Z pressed over the graph is held back: if no drawing starts, it is typed after all,
+  // when Z comes up or just before the next key.
+  let heldZ = null; // { key, target }
+  function typeHeldZ() {
+    const z = heldZ; heldZ = null;
+    if (!z || document.activeElement !== z.target) return;
+    const field = z.target.closest && z.target.closest('.mq-field');
+    if (field) { const mq = MQ(field); if (mq) mq.typedText(z.key); return; }
+    if (z.target.setRangeText && typeof z.target.selectionStart === 'number') {
+      z.target.setRangeText(z.key, z.target.selectionStart, z.target.selectionEnd, 'end');
+      z.target.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
   window.addEventListener('keydown', e => {
-    if (!isZ(e)) return;
+    const plainZ = e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
+    if (!plainZ) { typeHeldZ(); return; }
     if (e.repeat) {
-      // holding Z to draw should not type a row of z's
-      if (graph.hovering || graph.drawKey) { e.preventDefault(); e.stopPropagation(); }
+      if (graph.drawKey) { e.preventDefault(); e.stopPropagation(); } // no row of z's while drawing
       return;
     }
-    const a = document.activeElement;
-    zTypedInto = a && a.classList.contains('note-text') ? { ta: a }
-      : lastFocusedMQ && a && a.closest && a.closest('.mq-field') ? { mq: lastFocusedMQ.mq } : null;
+    if (!graph.hovering) return;
+    e.preventDefault(); e.stopPropagation();
+    heldZ = { key: e.key, target: document.activeElement };
     graph.setDrawKey(true);
   }, true);
-  window.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'z') { zTypedInto = null; graph.setDrawKey(false); } });
-  window.addEventListener('blur', () => { zTypedInto = null; graph.setDrawKey(false); });
+  window.addEventListener('keyup', e => {
+    if (e.key.toLowerCase() !== 'z' || !graph.drawKey) return;
+    typeHeldZ();
+    graph.setDrawKey(false);
+  });
+  window.addEventListener('blur', () => { heldZ = null; graph.setDrawKey(false); });
   graph.setSettings(state.settings);
   GM.settings.degrees = !!state.settings.degrees;
 
@@ -648,8 +652,6 @@
       refresh();
     }, err => {
       console.error(err);
-      graph.sketches = sketches.concat(graph.sketches); // keep the drawing for the next try
-      graph.redraw();
       const at = indexOf(wait.id);
       if (at < 0) return;
       // put the question back where it was so it is not lost
