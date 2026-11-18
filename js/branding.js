@@ -130,30 +130,35 @@
   // Read a chosen image file as a data: URL. The top bar shows images at most
   // 44px tall, so a large photo or PNG is scaled down to LOGO_HEIGHT first;
   // that keeps the saved settings small enough for browser storage and the worker.
+  // A newer upload, "Use default", "Remove" or a reset cancels a read still in progress.
+  let uploadGen = 0;
   function readImage(input, done) {
     const f = input.files[0];
     input.value = '';
     if (!f) return;
     if (!/^image\/(png|jpeg|gif|webp|svg\+xml)$/.test(f.type)) { alert('Please choose a PNG, JPEG, GIF, WebP or SVG image.'); return; }
+    if (f.type === 'image/svg+xml' && f.size > MAX_LOGO_BYTES) { alert('Please choose an SVG under 1 MB.'); return; }
+    const gen = ++uploadGen;
+    const finish = url => { if (gen === uploadGen) done(url); };
     const reader = new FileReader();
     reader.onload = () => {
       const url = String(reader.result);
-      if (f.type === 'image/svg+xml') {
-        if (url.length > MAX_LOGO_BYTES) alert('That SVG is too large. Please choose one under 1 MB.');
-        else done(url);
-        return;
-      }
+      if (f.type === 'image/svg+xml') { finish(url); return; }
       const img = new Image();
       img.onload = () => {
-        const scale = Math.min(1, LOGO_HEIGHT / img.naturalHeight, LOGO_WIDTH / img.naturalWidth);
+        let scale = Math.min(1, LOGO_HEIGHT / img.naturalHeight, LOGO_WIDTH / img.naturalWidth);
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        let small = canvas.toDataURL('image/png');
-        if (small.length > MAX_LOGO_BYTES) small = canvas.toDataURL('image/webp', 0.9); // photo-like images: lossy, keeps transparency
-        if (small.length > MAX_LOGO_BYTES) alert('That image is too detailed to save. Please try a simpler one.');
-        else done(small);
+        for (;;) {
+          canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          let small = canvas.toDataURL('image/png');
+          if (small.length > MAX_LOGO_BYTES) small = canvas.toDataURL('image/webp', 0.9); // lossy, keeps transparency
+          if (small.length <= MAX_LOGO_BYTES) { finish(small); return; }
+          // still too big (for example no WebP encoder): try again at half the size, down to the shown height
+          if (canvas.height <= 44) { alert('That image is too detailed to save. Please try a simpler one.'); return; }
+          scale /= 2;
+        }
       };
       img.onerror = () => alert('That image could not be read. Please try another file.');
       img.src = url;
@@ -218,7 +223,7 @@
     file.addEventListener('change', () => readImage(file, url => {
       brand.logo = url; sanitize(brand); brand.showLogo = true; showCb.checked = true; apply(); save(); syncPrev();
     }));
-    def.addEventListener('click', () => { brand.logo = ''; apply(); save(); syncPrev(); });
+    def.addEventListener('click', () => { uploadGen++; brand.logo = ''; apply(); save(); syncPrev(); });
     showCb.addEventListener('change', () => { brand.showLogo = showCb.checked; apply(); save(); });
     logoBox.append(prev, upload, def, file, show);
 
@@ -253,7 +258,7 @@
     syncCenter();
     cUpload.addEventListener('click', () => cFile.click());
     cFile.addEventListener('change', () => readImage(cFile, url => { brand.centerIcon = url; sanitize(brand); apply(); save(); syncCenter(); }));
-    cRemove.addEventListener('click', () => { brand.centerIcon = ''; apply(); save(); syncCenter(); });
+    cRemove.addEventListener('click', () => { uploadGen++; brand.centerIcon = ''; apply(); save(); syncCenter(); });
     cSize.addEventListener('input', () => { brand.centerSize = Number(cSize.value); apply(); save(); });
     cBox.append(cPrev, cUpload, cRemove, cFile, cSizeLbl);
 
@@ -274,6 +279,7 @@
     panel.querySelector('.bp-x').addEventListener('click', close);
     panel.querySelector('.bp-done').addEventListener('click', close);
     panel.querySelector('.bp-reset').addEventListener('click', () => {
+      uploadGen++;
       if (!confirm('Reset the top bar, logo and text to the defaults?')) return;
       brand = Object.assign({}, DEFAULTS); apply(); save(); close(); open();
     });
