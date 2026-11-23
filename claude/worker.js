@@ -1,5 +1,7 @@
 // Answers Gridline questions with the Claude API, entirely in the cloud.
 // A page POSTs {question, context} to /ask and gets back {steps} or {error}.
+// Reference files uploaded in the panel (stored by worker/ in the shared KV) go along with
+// every question, so Claude solves it the way they show.
 // Asking is open to anyone by design: only trusted people use the calculator.
 // The API key is the worker secret ANTHROPIC_API_KEY.
 import Anthropic from '@anthropic-ai/sdk';
@@ -29,7 +31,9 @@ Rules:
 
 The person may have hand-drawn strokes on the graph. They come as lists of (x, y) points in graph coordinates, in drawing order. Read them as a sketch: the shape of a curve, a region, a point or an arrow the question refers to. When the question asks what a drawing is, fit it with the simplest expression that matches its shape.
 
-The question may have been typed into a maths field, so words can run together without spaces and may appear as LaTeX.`;
+The question may have been typed into a maths field, so words can run together without spaces and may appear as LaTeX.
+
+Reference material (documents or images) may come before the question. It shows the methods the person has been taught. When it covers the kind of problem asked, solve it with the method it shows, following its notation and order of steps. When it does not, ignore it. Never mention, quote or point to the reference material, and never say where a method came from: the answer should read as if you chose the method yourself.`;
 
 const SCHEMA = {
   type: 'object',
@@ -51,7 +55,26 @@ const SCHEMA = {
 const reply = (body, status) => new Response(body, { status, headers: CORS });
 const json = (data, status) => new Response(JSON.stringify(data), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-export async function handle(request, client) {
+// The reference files saved from the panel, kept by the gridline-settings worker in the
+// same KV namespace. Asking still works without them if the store can't be read.
+export async function loadReferences(env) {
+  try { return JSON.parse(await env.SETTINGS.get('references')) || []; }
+  catch (e) { console.error('Could not read reference files', e); return []; }
+}
+
+// Reference files as content blocks. The last one carries the cache breakpoint, so repeat
+// questions read the files from the cache.
+function referenceBlocks(references) {
+  const blocks = references.map(r =>
+    r.kind === 'pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: r.data } }
+    : r.kind === 'text' ? { type: 'document', source: { type: 'text', media_type: 'text/plain', data: r.data } }
+    : r.kind === 'image' ? { type: 'image', source: { type: 'base64', media_type: r.mediaType, data: r.data } }
+    : null).filter(Boolean);
+  if (blocks.length) blocks[blocks.length - 1].cache_control = { type: 'ephemeral' };
+  return blocks;
+}
+
+export async function handle(request, client, references = []) {
   const { pathname } = new URL(request.url);
   if (request.method === 'OPTIONS') return reply(null, 204);
   if (pathname !== '/ask') return reply('Not found', 404);
@@ -72,6 +95,8 @@ export async function handle(request, client) {
   const prompt = (context.length ? 'Rows already in the calculator:\n' + context.join('\n') + '\n\n' : '')
     + (drawing ? 'Strokes the person drew on the graph:\n' + drawing + '\n\n' : '')
     + 'Question:\n' + question;
+  const refs = referenceBlocks(references);
+  const content = refs.length ? [...refs, { type: 'text', text: prompt }] : prompt;
 
   let message;
   try {
@@ -82,7 +107,7 @@ export async function handle(request, client) {
       fallbacks: 'default',
       system: SYSTEM,
       output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content }]
     }, { signal: AbortSignal.timeout(DEADLINE_MS) }); // one deadline across the SDK's retries
   } catch (e) {
     console.error(e);
@@ -101,7 +126,8 @@ export async function handle(request, client) {
 }
 
 export default {
-  fetch(request, env) {
-    return handle(request, new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }));
+  async fetch(request, env) {
+    const references = new URL(request.url).pathname === '/ask' && request.method === 'POST' ? await loadReferences(env) : [];
+    return handle(request, new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }), references);
   }
 };

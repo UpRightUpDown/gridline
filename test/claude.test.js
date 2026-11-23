@@ -107,6 +107,36 @@ test('ask passes on every row, including a long table', async () => {
   assert.match(prompt, /\["1999","3996001"\]/);
 });
 
+test('ask puts the reference files before the question, cached, and tells Claude to use them silently', async () => {
+  const { handle, SYSTEM } = await load();
+  const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));
+  const references = [
+    { id: '1', name: 'unit 3.pdf', kind: 'pdf', mediaType: 'application/pdf', data: 'JVBERi0=' },
+    { id: '2', name: 'method.txt', kind: 'text', mediaType: 'text/plain', data: 'Always complete the square.' },
+    { id: '3', name: 'board.png', kind: 'image', mediaType: 'image/png', data: 'iVBORw0=' }
+  ];
+  const res = await handle(askReq({ question: 'solve x^2+6x+5=0' }), client, references);
+  assert.strictEqual(res.status, 200);
+  const content = client.calls[0].messages[0].content;
+  assert.deepStrictEqual(content[0], { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'JVBERi0=' } });
+  assert.deepStrictEqual(content[1], { type: 'document', source: { type: 'text', media_type: 'text/plain', data: 'Always complete the square.' } });
+  assert.deepStrictEqual(content[2], { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0=' }, cache_control: { type: 'ephemeral' } });
+  assert.strictEqual(content.length, 4);
+  assert.strictEqual(content[3].type, 'text');
+  assert.match(content[3].text, /solve x\^2\+6x\+5=0/);
+  assert.match(SYSTEM, /reference material/i);
+  assert.match(SYSTEM, /never mention/i);
+});
+
+test('the worker reads the reference files from the shared settings store', async () => {
+  const mod = await load();
+  const stored = [{ id: '1', name: 'm.txt', kind: 'text', mediaType: 'text/plain', data: 'Use substitution.' }];
+  const env = { SETTINGS: { get: async k => k === 'references' ? JSON.stringify(stored) : null } };
+  assert.deepStrictEqual(await mod.loadReferences(env), stored);
+  assert.deepStrictEqual(await mod.loadReferences({ SETTINGS: { get: async () => null } }), []);
+  assert.deepStrictEqual(await mod.loadReferences({ SETTINGS: { get: async () => { throw new Error('down'); } } }), []);
+});
+
 test('ask says when the rows are too much to send', async () => {
   const { handle } = await load();
   const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));

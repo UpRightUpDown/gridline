@@ -10,3 +10,8 @@ new_sqlite_classes = ["Relay"]
 [[migrations]]
 tag = "v2"
 deleted_classes = ["Relay"]
+
+# Shared with gridline-settings (worker/), which stores the reference files from the panel.
+[[kv_namespaces]]
+binding = "SETTINGS"
+id = "668fd533301f4c5c84c33e763a940e7e"
