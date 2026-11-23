@@ -37,6 +37,6 @@ test('list, add and remove talk to the settings worker', async () => {
 });
 
 test('add passes on the reason the worker gives for turning a file away', async () => {
-  await assert.rejects(R.add({ name: 'x.pdf', kind: 'pdf', mediaType: 'application/pdf', data: 'x' }, fakeFetch(413, 'The reference material is full (20 MB). Remove a file first.')), /full/);
+  await assert.rejects(R.add({ name: 'x.pdf', kind: 'pdf', mediaType: 'application/pdf', data: 'x' }, fakeFetch(413, 'The reference material is full (5 MB in all). Remove a file first.')), /full/);
   await assert.rejects(R.list(async () => { throw new TypeError('Failed to fetch'); }), /could not reach/i);
 });

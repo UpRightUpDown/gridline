@@ -140,7 +140,18 @@ test('with no reference files, the request is what it was before', async () => {
   assert.strictEqual(typeof client.calls[0].messages[0].content, 'string');
 });
 
-test('ask says to check the reference files when the API turns the request away', async () => {
+test('Ask Claude loads no more than 5 MB of files, whatever the store holds', async () => {
+  const { loadReferences } = await load();
+  const kv = fakeKV();
+  const three = 'x'.repeat(3 * 1000 * 1000);
+  // as if two uploads overlapped and both passed the cap
+  await kv.put('ref:a', three, { metadata: { name: 'a.pdf', kind: 'pdf', mediaType: 'application/pdf', size: three.length } });
+  await kv.put('ref:b', three, { metadata: { name: 'b.pdf', kind: 'pdf', mediaType: 'application/pdf', size: three.length } });
+  await kv.put('ref:c', 'small', { metadata: { name: 'c.txt', kind: 'text', mediaType: 'text/plain', size: 5 } });
+  assert.deepStrictEqual((await loadReferences({ SETTINGS: kv })).map(r => r.name), ['a.pdf', 'c.txt']);
+});
+
+test('ask points at the reference files when the API turns the request away', async () => {
   const { handle } = await load();
   const bad = Object.assign(new Error('Could not process PDF'), { status: 400 });
   const refs = [{ id: '1', name: 'broken.pdf', kind: 'pdf', mediaType: 'application/pdf', data: 'xx' }];
@@ -163,6 +174,9 @@ test('the worker reads the files the settings worker stored, in upload order', a
     ['m.txt', 'text', 'text/plain', 'Use substitution.'],
     ['b.png', 'image', 'image/png', 'iVBORw0=']
   ]);
+  // many uploads in the same millisecond still list in order
+  for (let i = 0; i < 30; i++) await up({ name: 'n' + i + '.txt', kind: 'text', mediaType: 'text/plain', data: 'x' });
+  assert.deepStrictEqual((await loadReferences(env)).slice(2).map(r => r.name), Array.from({ length: 30 }, (_, i) => 'n' + i + '.txt'));
   assert.deepStrictEqual(await loadReferences({ SETTINGS: fakeKV() }), []);
   assert.deepStrictEqual(await loadReferences({ SETTINGS: { list: async () => { throw new Error('down'); } } }), []);
 });

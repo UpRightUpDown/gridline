@@ -36,6 +36,10 @@ async function listReferences(env) {
   return out;
 }
 
+let seq = 0;
+
+// The cap is checked against the store's list, so uploads that overlap can pass it together;
+// the gridline-claude worker stops loading files at the cap, which bounds what each question sends.
 async function references(request, env, id) {
   if (request.method === 'GET' && !id) {
     return json((await listReferences(env)).map(r => ({ id: r.id, name: r.name, kind: r.kind, size: r.size })), 200);
@@ -56,7 +60,8 @@ async function references(request, env, id) {
     if (used + size > MAX_REFERENCES) return reply('The reference material is full (5 MB in all). Remove a file or choose a smaller one.', 413);
     // KV metadata holds 1024 bytes, so the name is cut to 100 characters
     const meta = { name: f.name.trim().slice(0, 100), kind: f.kind, mediaType: f.mediaType, size };
-    const newId = Date.now().toString(36).padStart(9, '0') + '-' + crypto.randomUUID();
+    // time, then a counter so uploads in the same millisecond keep their order, then a uuid
+    const newId = Date.now().toString(36).padStart(9, '0') + '-' + (seq++ % 1679616).toString(36).padStart(4, '0') + '-' + crypto.randomUUID();
     await env.SETTINGS.put(PREFIX + newId, f.data, { metadata: meta });
     return json({ id: newId, name: meta.name, kind: meta.kind, size }, 201);
   }

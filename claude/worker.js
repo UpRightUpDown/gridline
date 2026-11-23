@@ -15,6 +15,7 @@ const MAX_QUESTION = 5000;
 const MAX_CONTEXT = 200000; // room for the calculator's rows, tables included, as they arrive in the JSON body
 const MAX_SKETCH = 30000; // characters of hand-drawn strokes in the request body
 const DEADLINE_MS = 150000;
+const MAX_REFERENCES = 5 * 1000 * 1000; // bytes of reference files, as worker/index.js caps them
 
 export const SYSTEM = String.raw`You answer questions inside Gridline, a Desmos-style graphing calculator. Your answer appears as rows in its expression list, in order, right under the question. Work the problem out step by step, one row per step.
 
@@ -68,7 +69,16 @@ export async function loadReferences(env) {
       keys.push(...page.keys.filter(k => k.metadata));
       cursor = page.list_complete ? null : page.cursor;
     } while (cursor);
-    const files = await Promise.all(keys.map(async k => ({ ...k.metadata, data: await env.SETTINGS.get(k.name) })));
+    // the settings worker caps uploads at 5 MB, but overlapping uploads can pass it together,
+    // so stop here too: every question holds all of these in memory
+    let total = 0;
+    const wanted = keys.filter(k => {
+      const size = k.metadata.size || 0;
+      if (total + size > MAX_REFERENCES) return false;
+      total += size;
+      return true;
+    });
+    const files = await Promise.all(wanted.map(async k => ({ ...k.metadata, data: await env.SETTINGS.get(k.name) })));
     return files.filter(f => f.data); // a file removed since the list was read
   } catch (e) { console.error('Could not read reference files', e); return []; }
 }
@@ -121,8 +131,9 @@ export async function handle(request, client, references = []) {
     }, { signal: AbortSignal.timeout(DEADLINE_MS) }); // one deadline across the SDK's retries
   } catch (e) {
     console.error(e);
-    // a file the API can't read (a damaged PDF, say) would otherwise fail every question
-    if (refs.length && e.status === 400) return json({ error: 'Claude could not read one of the reference files. Remove it in the settings panel (Ctrl+Shift+`) and try again.' }, 502);
+    // a file the API can't read (damaged, or too long) would otherwise fail every question
+    // with no hint; the files are the likely cause, but the API's reason isn't parsed
+    if (refs.length && e.status === 400) return json({ error: 'Claude could not answer with the reference files attached. If this keeps happening, one may be damaged or too long: remove it in the settings panel (Ctrl+Shift+`).' }, 502);
     return json({ error: 'Claude could not answer right now. Try again in a moment.' }, 502);
   }
   if (message.stop_reason === 'refusal') return json({ error: 'Claude declined to answer that.' }, 502);

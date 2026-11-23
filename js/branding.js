@@ -236,7 +236,7 @@
         rm.setAttribute('aria-label', 'Remove ' + r.name);
         rm.addEventListener('click', async () => {
           rm.disabled = true;
-          try { await window.GRefs.remove(r.id); items = items.filter(i => i.id !== r.id); render(); say(''); }
+          try { await window.GRefs.remove(r.id); items = items.filter(i => i.id !== r.id); render(); }
           catch (e) { rm.disabled = false; say(e.message); }
         });
         li.append(name, rm);
@@ -262,7 +262,7 @@
     upload.disabled = true;
     window.GRefs.list()
       .then(loaded => { items = loaded; render(); say(''); upload.disabled = false; })
-      .catch(e => say(e.message));
+      .catch(e => say(e.message + ' Close and reopen this panel to try again.'));
     box.append(list, empty, upload, file, status);
     return box;
   }
