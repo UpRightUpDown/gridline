@@ -12,8 +12,8 @@ const CORS = {
 const MAX_BYTES = 4 * 1024 * 1024; // two 1 MB images, base64-encoded, plus text
 // All reference files together, in bytes. Every question loads and re-sends them all, so this
 // stays small enough for several questions at once in a worker's 128 MB of memory.
-export const MAX_REFERENCES = 5 * 1000 * 1000;
-export const PREFIX = 'ref:'; // one KV key per file, so uploads never rewrite each other
+const MAX_REFERENCES = 5 * 1000 * 1000;
+const PREFIX = 'ref:'; // one KV key per file, so uploads never rewrite each other
 const KINDS = {
   pdf: /^application\/pdf$/,
   text: /^text\/plain$/,

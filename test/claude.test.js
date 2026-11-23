@@ -4,7 +4,8 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 
 const fakeKV = require('./kv.js');
-const load = () => import(pathToFileURL(path.join(__dirname, '..', 'claude', 'worker.js')).href);
+const mod = f => import(pathToFileURL(path.join(__dirname, '..', 'claude', f)).href);
+const load = async () => ({ ...await mod('worker.js'), ...await mod('prompt.js') });
 const askReq = body => new Request('https://example.test/ask', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) });
 // Stands in for the Anthropic SDK client at the network boundary.
 const fakeClient = reply => {
