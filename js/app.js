@@ -150,8 +150,19 @@
   });
   // Draw on the graph for Claude: see js/drawkey.js. The strokes go with the next question.
   const drawKey = window.GDrawKey.createDrawKey(on => graph.setDrawKey(on));
+  function typeHeldZ(z) {
+    if (document.activeElement !== z.target) return;
+    const field = z.target.closest && z.target.closest('.mq-field');
+    if (field) { const mq = MQ(field); if (mq) mq.typedText(z.key); return; }
+    if (z.target.setRangeText && typeof z.target.selectionStart === 'number') {
+      z.target.setRangeText(z.key, z.target.selectionStart, z.target.selectionEnd, 'end');
+      z.target.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
   window.addEventListener('keydown', e => {
-    if (drawKey.keydown(e, graph.hovering).swallow) { e.preventDefault(); e.stopPropagation(); }
+    const r = drawKey.keydown(e, graph.hovering, document.activeElement);
+    if (r.typeHeld) typeHeldZ(r.typeHeld);
+    if (r.swallow) { e.preventDefault(); e.stopPropagation(); }
   }, true);
   window.addEventListener('keyup', e => drawKey.keyup(e));
   window.addEventListener('blur', () => drawKey.blur());

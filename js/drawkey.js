@@ -1,37 +1,48 @@
 /* Z turns on drawing on the graph. With the pointer over the graph, a tap of Z turns
  * drawing on and leaves it on, so a touchpad can draw: Windows ignores the touchpad while
  * a key is held. Tap Z again or press Esc to turn it off. Holding Z while dragging with a
- * mouse also works, and turns off when Z comes up. Z over the graph never types a "z". */
+ * mouse also works, and turns off when Z comes up.
+ * The Z that turned drawing on is held back. If another key comes before any stroke, the
+ * user was typing, so the z is handed back to be typed and drawing turns off. */
 (function (root) {
   'use strict';
 
+  const MODIFIER = /^(Shift|Control|Alt|AltGraph|Meta|CapsLock)$/;
+
   function createDrawKey(onChange) {
     let on = false;
-    let zDown = false;  // a Z pressed over the graph is still down
-    let drew = false;   // a stroke started during this Z press
+    let zDown = false;        // a swallowed Z press is still down: keep its repeats out
+    let offOnRelease = false; // this Z press ends drawing when it comes up
+    let drew = false;         // a stroke started since drawing turned on
+    let held = null;          // { key, target } of the Z that turned drawing on
     const set = v => { if (v !== on) { on = v; if (onChange) onChange(v); } };
-    const stop = () => { zDown = false; set(false); };
+    const stop = () => { offOnRelease = false; held = null; set(false); };
     return {
       get on() { return on; },
-      // Returns whether the key should be kept from the page.
-      keydown(e, hovering) {
+      // Returns whether the key should be kept from the page, and any z to type first.
+      keydown(e, hovering, target) {
         if (e.key === 'Escape' && on) { stop(); return { swallow: false }; }
         const plainZ = String(e.key).toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
-        if (!plainZ) return { swallow: false };
+        if (!plainZ) {
+          if (!held || drew || MODIFIER.test(e.key)) return { swallow: false };
+          const z = held; stop();
+          return { swallow: false, typeHeld: z };
+        }
         if (e.repeat) return { swallow: zDown };
         if (!hovering) return { swallow: false };
-        if (on) { stop(); return { swallow: true }; }
-        zDown = true; drew = false;
+        zDown = true;
+        if (on) { offOnRelease = true; return { swallow: true }; }
+        drew = false; held = { key: e.key, target };
         set(true);
         return { swallow: true };
       },
       keyup(e) {
         if (String(e.key).toLowerCase() !== 'z' || !zDown) return;
         zDown = false;
-        if (drew) set(false); // held while drawing: letting go ends it
+        if (offOnRelease || drew) stop(); // a second tap, or held while drawing
       },
-      sketchStart() { drew = true; },
-      blur() { if (zDown) stop(); },
+      sketchStart() { drew = true; held = null; },
+      blur() { if (zDown) { zDown = false; stop(); } },
       stop,
     };
   }
