@@ -219,8 +219,14 @@
     file.accept = '.pdf,.txt,.md,.csv,.tex,application/pdf,text/plain,image/png,image/jpeg,image/gif,image/webp';
     const upload = document.createElement('button');
     upload.textContent = 'Upload files…';
+    const empty = document.createElement('span');
+    empty.className = 'bp-hint hidden';
+    empty.textContent = 'No files yet.';
     const say = text => { status.textContent = text; };
-    const render = items => {
+    // The list is loaded once when the panel opens, then kept here: the store's own list can
+    // take up to a minute to show a change.
+    let items = [];
+    const render = () => {
       list.replaceChildren(...items.map(r => {
         const li = document.createElement('li');
         const name = document.createElement('span');
@@ -230,17 +236,14 @@
         rm.setAttribute('aria-label', 'Remove ' + r.name);
         rm.addEventListener('click', async () => {
           rm.disabled = true;
-          try { await window.GRefs.remove(r.id); refresh(); }
+          try { await window.GRefs.remove(r.id); items = items.filter(i => i.id !== r.id); render(); say(''); }
           catch (e) { rm.disabled = false; say(e.message); }
         });
         li.append(name, rm);
         return li;
       }));
       list.classList.toggle('hidden', !items.length);
-    };
-    const refresh = async () => {
-      try { const items = await window.GRefs.list(); render(items); say(items.length ? '' : 'No files yet.'); }
-      catch (e) { say(e.message); }
+      empty.classList.toggle('hidden', !!items.length);
     };
     upload.addEventListener('click', () => file.click());
     file.addEventListener('change', async () => {
@@ -249,23 +252,24 @@
       upload.disabled = true;
       for (const f of files) {
         say('Uploading ' + f.name + '…');
-        try { await window.GRefs.add(await window.GRefs.readFile(f)); }
-        catch (e) { say(f.name + ': ' + e.message); upload.disabled = false; refresh(); return; }
+        try { items.push(await window.GRefs.add(await window.GRefs.readFile(f))); render(); }
+        catch (e) { say(f.name + ': ' + e.message); upload.disabled = false; return; }
       }
       upload.disabled = false;
       say('');
-      refresh();
     });
-    render([]);
     say('Loading…');
-    refresh();
-    box.append(list, upload, file, status);
+    upload.disabled = true;
+    window.GRefs.list()
+      .then(loaded => { items = loaded; render(); say(''); upload.disabled = false; })
+      .catch(e => say(e.message));
+    box.append(list, empty, upload, file, status);
     return box;
   }
 
   // A div, not field()'s <label>: a click on a label's text would press its first button, Remove.
   function refsField() {
-    const row = field('Reference material for Ask Claude', refsBox(), 'PDFs, text files or images showing the methods you teach. Claude uses them to choose how to solve a problem but never mentions them. Shared by every device; up to 20 MB in all.');
+    const row = field('Reference material for Ask Claude', refsBox(), 'PDFs, text files or images showing the methods you teach. Claude uses them to choose how to solve a problem but never mentions them. Shared by every device; up to 5 MB in all.');
     const div = document.createElement('div');
     div.className = row.className;
     div.append(...row.childNodes);

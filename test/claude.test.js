@@ -3,6 +3,7 @@ const assert = require('node:assert');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
+const fakeKV = require('./kv.js');
 const load = () => import(pathToFileURL(path.join(__dirname, '..', 'claude', 'worker.js')).href);
 const askReq = body => new Request('https://example.test/ask', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) });
 // Stands in for the Anthropic SDK client at the network boundary.
@@ -124,8 +125,19 @@ test('ask puts the reference files before the question, cached, and tells Claude
   assert.strictEqual(content.length, 4);
   assert.strictEqual(content[3].type, 'text');
   assert.match(content[3].text, /solve x\^2\+6x\+5=0/);
-  assert.match(SYSTEM, /reference material/i);
-  assert.match(SYSTEM, /never mention/i);
+  const system = client.calls[0].system;
+  assert.ok(system.startsWith(SYSTEM));
+  assert.match(system, /reference material/i);
+  assert.match(system, /never mention/i);
+});
+
+test('with no reference files, the request is what it was before', async () => {
+  const { handle, SYSTEM } = await load();
+  const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));
+  await handle(askReq({ question: 'q' }), client, []);
+  assert.strictEqual(client.calls[0].system, SYSTEM);
+  assert.doesNotMatch(SYSTEM, /reference/i);
+  assert.strictEqual(typeof client.calls[0].messages[0].content, 'string');
 });
 
 test('ask says to check the reference files when the API turns the request away', async () => {
@@ -139,13 +151,20 @@ test('ask says to check the reference files when the API turns the request away'
   assert.doesNotMatch((await res.json()).error, /reference/i);
 });
 
-test('the worker reads the reference files from the shared settings store', async () => {
-  const mod = await load();
-  const stored = [{ id: '1', name: 'm.txt', kind: 'text', mediaType: 'text/plain', data: 'Use substitution.' }];
-  const env = { SETTINGS: { get: async k => k === 'references' ? JSON.stringify(stored) : null } };
-  assert.deepStrictEqual(await mod.loadReferences(env), stored);
-  assert.deepStrictEqual(await mod.loadReferences({ SETTINGS: { get: async () => null } }), []);
-  assert.deepStrictEqual(await mod.loadReferences({ SETTINGS: { get: async () => { throw new Error('down'); } } }), []);
+test('the worker reads the files the settings worker stored, in upload order', async () => {
+  const { loadReferences } = await load();
+  const settings = (await import(pathToFileURL(path.join(__dirname, '..', 'worker', 'index.js')).href)).default;
+  const env = { SETTINGS: fakeKV() };
+  const up = body => settings.fetch(new Request('https://example.test/references', { method: 'POST', body: JSON.stringify(body) }), env);
+  await up({ name: 'm.txt', kind: 'text', mediaType: 'text/plain', data: 'Use substitution.' });
+  await up({ name: 'b.png', kind: 'image', mediaType: 'image/png', data: 'iVBORw0=' });
+  const refs = await loadReferences(env);
+  assert.deepStrictEqual(refs.map(r => [r.name, r.kind, r.mediaType, r.data]), [
+    ['m.txt', 'text', 'text/plain', 'Use substitution.'],
+    ['b.png', 'image', 'image/png', 'iVBORw0=']
+  ]);
+  assert.deepStrictEqual(await loadReferences({ SETTINGS: fakeKV() }), []);
+  assert.deepStrictEqual(await loadReferences({ SETTINGS: { list: async () => { throw new Error('down'); } } }), []);
 });
 
 test('ask says when the rows are too much to send', async () => {

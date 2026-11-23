@@ -5,7 +5,7 @@
 (function (root) {
   'use strict';
   const URL = 'https://gridline-settings.uprightupdown.workers.dev/references';
-  const MAX_FILE = 15 * 1024 * 1024; // one file before encoding; the worker holds 20 MB in all
+  const MAX_FILE = 3.7 * 1000 * 1000; // a PDF this size is 5 MB once base64-encoded, all the worker holds
   const IMAGE_EDGE = 1568;           // Claude scales larger images down to this anyway
 
   // 'pdf', 'text' or 'image' for a file Claude can read, otherwise null.
@@ -38,7 +38,8 @@
   function readFile(file) {
     const kind = kindOf(file);
     if (!kind) return Promise.reject(new Error('Please choose a PDF, a text file (.txt, .md, .csv) or a PNG, JPEG, GIF or WebP image.'));
-    if (file.size > MAX_FILE) return Promise.reject(new Error('That file is over 15 MB. Please choose a smaller one.'));
+    // images are scaled down below, so only PDFs and text files can be too big here
+    if (kind !== 'image' && file.size > MAX_FILE) return Promise.reject(new Error('That file is over 3.7 MB. The reference files can add up to 5 MB, so please choose a smaller one.'));
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = () => reject(new Error('That file could not be read. Please try another.'));

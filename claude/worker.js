@@ -31,9 +31,10 @@ Rules:
 
 The person may have hand-drawn strokes on the graph. They come as lists of (x, y) points in graph coordinates, in drawing order. Read them as a sketch: the shape of a curve, a region, a point or an arrow the question refers to. When the question asks what a drawing is, fit it with the simplest expression that matches its shape.
 
-The question may have been typed into a maths field, so words can run together without spaces and may appear as LaTeX.
+The question may have been typed into a maths field, so words can run together without spaces and may appear as LaTeX.`;
 
-Reference material (documents or images) may come before the question. It shows the methods the person has been taught. When it covers the kind of problem asked, solve it with the method it shows, following its notation and order of steps. When it does not, ignore it. Never mention, quote or point to the reference material, and never say where a method came from: the answer should read as if you chose the method yourself.`;
+// Added to SYSTEM only when reference files go with the question.
+export const REFERENCE_RULES = `Reference material (documents or images) comes before the question. It shows the methods the person has been taught. When it covers the kind of problem asked, solve the problem with the method it shows. When it does not, ignore it. Never mention, quote or point to the reference material, and never say where a method came from: the answer should read as if you chose the method yourself.`;
 
 const SCHEMA = {
   type: 'object',
@@ -57,9 +58,19 @@ const json = (data, status) => new Response(JSON.stringify(data), { status, head
 
 // The reference files saved from the panel, kept by the gridline-settings worker in the
 // same KV namespace. Asking still works without them if the store can't be read.
+// Each file is at ref:<id> with {name, kind, mediaType, size} as metadata; ids sort in upload order.
 export async function loadReferences(env) {
-  try { return JSON.parse(await env.SETTINGS.get('references')) || []; }
-  catch (e) { console.error('Could not read reference files', e); return []; }
+  try {
+    const keys = [];
+    let cursor;
+    do {
+      const page = await env.SETTINGS.list({ prefix: 'ref:', cursor });
+      keys.push(...page.keys.filter(k => k.metadata));
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
+    const files = await Promise.all(keys.map(async k => ({ ...k.metadata, data: await env.SETTINGS.get(k.name) })));
+    return files.filter(f => f.data); // a file removed since the list was read
+  } catch (e) { console.error('Could not read reference files', e); return []; }
 }
 
 // Reference files as content blocks. The last one carries the cache breakpoint, so repeat
@@ -68,8 +79,7 @@ function referenceBlocks(references) {
   const blocks = references.map(r =>
     r.kind === 'pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: r.data } }
     : r.kind === 'text' ? { type: 'document', source: { type: 'text', media_type: 'text/plain', data: r.data } }
-    : r.kind === 'image' ? { type: 'image', source: { type: 'base64', media_type: r.mediaType, data: r.data } }
-    : null).filter(Boolean);
+    : { type: 'image', source: { type: 'base64', media_type: r.mediaType, data: r.data } });
   if (blocks.length) blocks[blocks.length - 1].cache_control = { type: 'ephemeral' };
   return blocks;
 }
@@ -105,7 +115,7 @@ export async function handle(request, client, references = []) {
       max_tokens: 16000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
-      system: SYSTEM,
+      system: refs.length ? SYSTEM + '\n\n' + REFERENCE_RULES : SYSTEM,
       output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
       messages: [{ role: 'user', content }]
     }, { signal: AbortSignal.timeout(DEADLINE_MS) }); // one deadline across the SDK's retries

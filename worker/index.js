@@ -2,7 +2,7 @@
 // GET /branding returns the saved appearance (or {}); PUT /branding replaces it.
 // GET /references lists the reference files Ask Claude reads (names only), POST /references
 // adds one, and DELETE /references/<id> removes one. The gridline-claude worker reads the
-// files straight from the same store.
+// files straight from the same store (keys starting ref:).
 // Writes are open to anyone by design: only trusted people know about the panel.
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -10,7 +10,10 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 };
 const MAX_BYTES = 4 * 1024 * 1024; // two 1 MB images, base64-encoded, plus text
-export const MAX_REFERENCES = 20 * 1024 * 1024; // all reference files together; KV allows 25 MiB, the Claude API 32 MB a request
+// All reference files together, in bytes. Every question loads and re-sends them all, so this
+// stays small enough for several questions at once in a worker's 128 MB of memory.
+export const MAX_REFERENCES = 5 * 1000 * 1000;
+export const PREFIX = 'ref:'; // one KV key per file, so uploads never rewrite each other
 const KINDS = {
   pdf: /^application\/pdf$/,
   text: /^text\/plain$/,
@@ -20,31 +23,42 @@ const KINDS = {
 const reply = (body, status, extra) => new Response(body, { status, headers: { ...CORS, ...extra } });
 const json = (data, status) => reply(JSON.stringify(data), status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
 
-async function loadReferences(env) {
-  try { return JSON.parse(await env.SETTINGS.get('references')) || []; } catch (e) { return []; }
+// Each file is stored at ref:<id> with {name, kind, mediaType, size} as metadata, so the list
+// needs no file contents. Ids start with the upload time, so keys list in upload order.
+async function listReferences(env) {
+  const out = [];
+  let cursor;
+  do {
+    const page = await env.SETTINGS.list({ prefix: PREFIX, cursor });
+    for (const k of page.keys) if (k.metadata) out.push({ id: k.name.slice(PREFIX.length), ...k.metadata });
+    cursor = page.list_complete ? null : page.cursor;
+  } while (cursor);
+  return out;
 }
-const summary = r => ({ id: r.id, name: r.name, kind: r.kind, size: r.data.length });
 
 async function references(request, env, id) {
-  const list = await loadReferences(env);
-  if (request.method === 'GET' && !id) return json(list.map(summary), 200);
+  if (request.method === 'GET' && !id) {
+    return json((await listReferences(env)).map(r => ({ id: r.id, name: r.name, kind: r.kind, size: r.size })), 200);
+  }
   if (request.method === 'DELETE' && id) {
-    await env.SETTINGS.put('references', JSON.stringify(list.filter(r => r.id !== id)));
+    await env.SETTINGS.delete(PREFIX + id);
     return reply(null, 204);
   }
   if (request.method === 'POST' && !id) {
     const text = await request.text();
-    if (text.length > MAX_REFERENCES + 1024) return reply('That file is too large. The reference files can add up to 20 MB.', 413);
+    if (text.length > MAX_REFERENCES * 2) return reply('That file is too large. The reference files can add up to 5 MB.', 413);
     let f;
     try { f = JSON.parse(text); } catch (e) { return reply('Not JSON', 400); }
-    if (!f || !KINDS[f.kind] || !KINDS[f.kind].test(f.mediaType) || typeof f.data !== 'string' || !f.data
+    if (!f || !KINDS[f.kind] || !KINDS[f.kind].test(f.mediaType) || typeof f.data !== 'string' || !f.data.trim()
       || typeof f.name !== 'string' || !f.name.trim()) return reply('Expected a PDF, text file or image', 400);
-    const used = list.reduce((n, r) => n + r.data.length, 0);
-    if (used + f.data.length > MAX_REFERENCES) return reply('The reference material is full (20 MB). Remove a file first.', 413);
-    const item = { id: crypto.randomUUID(), name: f.name.trim().slice(0, 200), kind: f.kind, mediaType: f.mediaType, data: f.data };
-    list.push(item);
-    await env.SETTINGS.put('references', JSON.stringify(list));
-    return json(summary(item), 201);
+    const size = new TextEncoder().encode(f.data).length;
+    const used = (await listReferences(env)).reduce((n, r) => n + r.size, 0);
+    if (used + size > MAX_REFERENCES) return reply('The reference material is full (5 MB in all). Remove a file or choose a smaller one.', 413);
+    // KV metadata holds 1024 bytes, so the name is cut to 100 characters
+    const meta = { name: f.name.trim().slice(0, 100), kind: f.kind, mediaType: f.mediaType, size };
+    const newId = Date.now().toString(36).padStart(9, '0') + '-' + crypto.randomUUID();
+    await env.SETTINGS.put(PREFIX + newId, f.data, { metadata: meta });
+    return json({ id: newId, name: meta.name, kind: meta.kind, size }, 201);
   }
   return reply('Method not allowed', 405);
 }
@@ -54,7 +68,10 @@ export default {
     const { pathname } = new URL(request.url);
     if (request.method === 'OPTIONS') return reply(null, 204);
     const ref = pathname.match(/^\/references(?:\/([\w-]+))?$/);
-    if (ref) return references(request, env, ref[1]);
+    if (ref) {
+      try { return await references(request, env, ref[1]); }
+      catch (e) { console.error(e); return reply('The settings store is not working right now. Try again in a moment.', 500); }
+    }
     if (pathname !== '/branding') return reply('Not found', 404);
     if (request.method === 'GET') {
       const saved = await env.SETTINGS.get('branding');

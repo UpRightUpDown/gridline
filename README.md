@@ -25,7 +25,7 @@ To draw for Claude, point at the graph and tap Z. The cursor becomes a crosshair
 
 Questions go to a second Cloudflare Worker (`claude/worker.js`, deployed as `gridline-claude`), which asks Claude Opus 5.5 through the Claude API. It runs entirely in the cloud; nothing needs to be running on anyone's computer. Asking is open to anyone who has the page, and each question is billed to the API key stored as the worker's `ANTHROPIC_API_KEY` secret. Set the key with `npx wrangler secret put ANTHROPIC_API_KEY` and deploy with `npx wrangler deploy`, both from `claude/`.
 
-The Appearance panel also holds **reference material for Ask Claude**: PDFs, text files and images that show the methods you teach. Claude reads them with every question and uses them to choose how to solve it, but never mentions them in its answer. They are shared by every device (up to 20 MB in all), stored by the `gridline-settings` worker, and read from the same Cloudflare KV namespace by `gridline-claude`, so both workers need deploying after a change to either.
+The Appearance panel also holds **reference material for Ask Claude**: PDFs, text files and images that show the methods you teach. Claude reads them with every question and uses them to choose how to solve it, but never mentions them in its answer. They are shared by every device (up to 5 MB in all, since every question sends them all), stored one per key by the `gridline-settings` worker, and read from the same Cloudflare KV namespace by `gridline-claude`. A new or removed file can take up to a minute to reach Ask Claude.
 
 Install dependencies with `npm install` before running the tests or deploying.
 
