@@ -205,6 +205,73 @@
     return wrap;
   }
 
+  // Reference material for Ask Claude: a list of the shared files, each with Remove, and an
+  // upload button. Changes go straight to the shared store (window.GRefs, js/references.js).
+  function refsBox() {
+    const box = document.createElement('div');
+    box.className = 'bp-refs';
+    const list = document.createElement('ul');
+    const status = document.createElement('span');
+    status.className = 'bp-hint';
+    status.setAttribute('role', 'status');
+    const file = document.createElement('input');
+    file.type = 'file'; file.multiple = true; file.className = 'hidden';
+    file.accept = '.pdf,.txt,.md,.csv,.tex,application/pdf,text/plain,image/png,image/jpeg,image/gif,image/webp';
+    const upload = document.createElement('button');
+    upload.textContent = 'Upload files…';
+    const say = text => { status.textContent = text; };
+    const render = items => {
+      list.replaceChildren(...items.map(r => {
+        const li = document.createElement('li');
+        const name = document.createElement('span');
+        name.textContent = r.name;
+        const rm = document.createElement('button');
+        rm.textContent = 'Remove';
+        rm.setAttribute('aria-label', 'Remove ' + r.name);
+        rm.addEventListener('click', async () => {
+          rm.disabled = true;
+          try { await window.GRefs.remove(r.id); refresh(); }
+          catch (e) { rm.disabled = false; say(e.message); }
+        });
+        li.append(name, rm);
+        return li;
+      }));
+      list.classList.toggle('hidden', !items.length);
+    };
+    const refresh = async () => {
+      try { const items = await window.GRefs.list(); render(items); say(items.length ? '' : 'No files yet.'); }
+      catch (e) { say(e.message); }
+    };
+    upload.addEventListener('click', () => file.click());
+    file.addEventListener('change', async () => {
+      const files = Array.from(file.files);
+      file.value = '';
+      upload.disabled = true;
+      for (const f of files) {
+        say('Uploading ' + f.name + '…');
+        try { await window.GRefs.add(await window.GRefs.readFile(f)); }
+        catch (e) { say(f.name + ': ' + e.message); upload.disabled = false; refresh(); return; }
+      }
+      upload.disabled = false;
+      say('');
+      refresh();
+    });
+    render([]);
+    say('Loading…');
+    refresh();
+    box.append(list, upload, file, status);
+    return box;
+  }
+
+  // A div, not field()'s <label>: a click on a label's text would press its first button, Remove.
+  function refsField() {
+    const row = field('Reference material for Ask Claude', refsBox(), 'PDFs, text files or images showing the methods you teach. Claude uses them to choose how to solve a problem but never mentions them. Shared by every device; up to 20 MB in all.');
+    const div = document.createElement('div');
+    div.className = row.className;
+    div.append(...row.childNodes);
+    return div;
+  }
+
   function open() {
     if (panel) { close(); return; }
     panel = document.createElement('div');
@@ -282,7 +349,8 @@
       field('Header text', textInput('title', 'e.g. Graphing Calculator')),
       field('Second header text', textInput('subtitle', 'Optional'), 'Shown after another divider. Leave blank to hide it.'),
       field('Powered by', textInput('powered', 'Name under "powered by"'), 'Leave blank to hide the "powered by" line.'),
-      field('Done popup message', doneInput(), 'Shown when someone clicks Done at the top right. Leave a blank line to start a new paragraph.')
+      field('Done popup message', doneInput(), 'Shown when someone clicks Done at the top right. Leave a blank line to start a new paragraph.'),
+      refsField()
     );
 
     panel.querySelector('.bp-x').addEventListener('click', close);
