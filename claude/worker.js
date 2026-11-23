@@ -111,6 +111,8 @@ export async function handle(request, client, references = []) {
     }, { signal: AbortSignal.timeout(DEADLINE_MS) }); // one deadline across the SDK's retries
   } catch (e) {
     console.error(e);
+    // a file the API can't read (a damaged PDF, say) would otherwise fail every question
+    if (refs.length && e.status === 400) return json({ error: 'Claude could not read one of the reference files. Remove it in the settings panel (Ctrl+Shift+`) and try again.' }, 502);
     return json({ error: 'Claude could not answer right now. Try again in a moment.' }, 502);
   }
   if (message.stop_reason === 'refusal') return json({ error: 'Claude declined to answer that.' }, 502);

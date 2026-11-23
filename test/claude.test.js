@@ -128,6 +128,17 @@ test('ask puts the reference files before the question, cached, and tells Claude
   assert.match(SYSTEM, /never mention/i);
 });
 
+test('ask says to check the reference files when the API turns the request away', async () => {
+  const { handle } = await load();
+  const bad = Object.assign(new Error('Could not process PDF'), { status: 400 });
+  const refs = [{ id: '1', name: 'broken.pdf', kind: 'pdf', mediaType: 'application/pdf', data: 'xx' }];
+  let res = await handle(askReq({ question: 'q' }), fakeClient(bad), refs);
+  assert.strictEqual(res.status, 502);
+  assert.match((await res.json()).error, /reference file/i);
+  res = await handle(askReq({ question: 'q' }), fakeClient(bad), []);
+  assert.doesNotMatch((await res.json()).error, /reference/i);
+});
+
 test('the worker reads the reference files from the shared settings store', async () => {
   const mod = await load();
   const stored = [{ id: '1', name: 'm.txt', kind: 'text', mediaType: 'text/plain', data: 'Use substitution.' }];
