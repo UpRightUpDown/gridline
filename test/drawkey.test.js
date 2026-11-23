@@ -92,3 +92,13 @@ test('once a stroke is drawn, or for Shift alone, no z is typed', () => {
   assert.deepStrictEqual(d.keydown({ key: 'e' }, over), { swallow: false });
   assert.strictEqual(d.on, true);
 });
+
+test('keys that type nothing, like Enter or an arrow, drop the held z instead of typing it', () => {
+  const d = createDrawKey();
+  d.keydown(Z, over, {}); d.keyup(Z);
+  assert.deepStrictEqual(d.keydown({ key: 'Enter', shiftKey: true }, over), { swallow: false });
+  const e = createDrawKey();
+  e.keydown(Z, over, {}); e.keyup(Z);
+  assert.deepStrictEqual(e.keydown({ key: 'ArrowLeft' }, over), { swallow: false });
+  assert.deepStrictEqual(e.keydown({ key: 'x' }, over), { swallow: false }, 'the z is gone for good');
+});

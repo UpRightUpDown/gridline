@@ -2,12 +2,11 @@
  * drawing on and leaves it on, so a touchpad can draw: Windows ignores the touchpad while
  * a key is held. Tap Z again or press Esc to turn it off. Holding Z while dragging with a
  * mouse also works, and turns off when Z comes up.
- * The Z that turned drawing on is held back. If another key comes before any stroke, the
- * user was typing, so the z is handed back to be typed and drawing turns off. */
+ * The Z that turned drawing on is held back. If a key that types a character comes before
+ * any stroke, the user was typing, so the z is handed back to be typed and drawing turns off.
+ * Other keys, like Enter or the arrows, drop the held z. */
 (function (root) {
   'use strict';
-
-  const MODIFIER = /^(Shift|Control|Alt|AltGraph|Meta|CapsLock)$/;
 
   function createDrawKey(onChange) {
     let on = false;
@@ -24,7 +23,10 @@
         if (e.key === 'Escape' && on) { stop(); return { swallow: false }; }
         const plainZ = String(e.key).toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
         if (!plainZ) {
-          if (!held || drew || MODIFIER.test(e.key)) return { swallow: false };
+          if (!held || drew || String(e.key).length !== 1) {
+            if (held && !/^(Shift|Control|Alt|AltGraph|Meta|CapsLock)$/.test(e.key)) held = null; // Enter, arrows: drop the z
+            return { swallow: false };
+          }
           const z = held; stop();
           return { swallow: false, typeHeld: z };
         }
