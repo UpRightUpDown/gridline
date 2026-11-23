@@ -415,7 +415,7 @@ body.keypad-open .kp-toggle { visibility: hidden; }
 .bp-color input[type="text"] { width: 100px; font-family: monospace; }
 .bp-logo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .bp-logo img { height: 34px; max-width: 120px; padding: 6px; border-radius: 4px; object-fit: contain; }
-.bp-logo button, .bp-reset {
+.bp-logo button, .bp-reset, .bp-refs button {
   border: 1px solid rgba(0, 0, 0, 0.2); background: #f7f7f7; border-radius: 3px; padding: 6px 10px; font: 300 13px Arial, sans-serif; color: #000;
 }
 .bp-logo button:hover, .bp-reset:hover { background: #eee; }
@@ -434,7 +434,14 @@ body.keypad-open .kp-toggle { visibility: hidden; }
 .bp-inline { display: flex; align-items: center; gap: 12px; }
 .bp-inline input[type="text"] { flex: 1; }
 .bp-logo input[type="range"] { width: 90px; vertical-align: middle; }
-.bp-logo button:disabled { opacity: 0.4; cursor: default; }
+.bp-logo button:disabled, .bp-refs button:disabled { opacity: 0.4; cursor: default; }
+.bp-refs { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.bp-refs button:hover { background: #eee; }
+.bp-refs ul { list-style: none; margin: 0; padding: 0; align-self: stretch; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 3px; }
+.bp-refs li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 6px 5px 10px; font-size: 13px; }
+.bp-refs li + li { border-top: 1px solid rgba(0, 0, 0, 0.08); }
+.bp-refs li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.bp-refs li button { padding: 3px 8px; flex: none; }
 
 /* ------------------------------------------------------------ done popup */
 /* long top bar text shrinks and truncates, so Done always stays on screen */

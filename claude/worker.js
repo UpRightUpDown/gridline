@@ -1,8 +1,11 @@
 // Answers Gridline questions with the Claude API, entirely in the cloud.
 // A page POSTs {question, context} to /ask and gets back {steps} or {error}.
+// Reference files uploaded in the panel (stored by worker/ in the shared KV) go along with
+// every question, so Claude solves it the way they show.
 // Asking is open to anyone by design: only trusted people use the calculator.
 // The API key is the worker secret ANTHROPIC_API_KEY.
 import Anthropic from '@anthropic-ai/sdk';
+import { SYSTEM, REFERENCE_RULES } from './prompt.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -13,23 +16,7 @@ const MAX_QUESTION = 5000;
 const MAX_CONTEXT = 200000; // room for the calculator's rows, tables included, as they arrive in the JSON body
 const MAX_SKETCH = 30000; // characters of hand-drawn strokes in the request body
 const DEADLINE_MS = 150000;
-
-export const SYSTEM = String.raw`You answer questions inside Gridline, a Desmos-style graphing calculator. Your answer appears as rows in its expression list, in order, right under the question. Work the problem out step by step, one row per step.
-
-Each row is one of:
-- "expression": a single LaTeX expression the calculator evaluates or graphs, written the way Desmos stores it. Examples: f(x)=x^{2}\sin(x), f'(x), \frac{d}{dx}\left(x^{3}\right), a=5, 3\cdot4+2, (2,4), y=2x+1, x^{2}+y^{2}=25, \int_{0}^{1}x^{2}dx, \sum_{n=1}^{10}n^{2}. A row that is a plain calculation shows its value, and a row with x or y is graphed.
-- "note": one short sentence of plain text (no LaTeX, no markdown). Use a note only when the maths alone would leave the reader lost, such as naming a method that is not obvious from the expressions or stating a conclusion the rows do not show. Most answers need no notes at all.
-
-Rules:
-- One equation or expression per expression row. Never put words, \text, \pm, \approx, \neq, \Rightarrow, "=>" or commas joining separate statements in an expression row. Write two rows instead of using \pm. Write several points as a list in square brackets, such as [(2,0),(3,0)].
-- Each function or variable name may be defined only once across all rows, including the rows already in the calculator. Never define x, y, r, t or \theta, since the calculator uses them. Use new names such as g, h, a_{1} for intermediate results.
-- Let the maths speak for itself. Show the working as expression rows, so a person can see each step and its graph. Do not add a note that restates, announces or labels what an expression row already makes clear (no "First, define f", "Now take the derivative", "This is the answer"). End with the final answer as an expression row.
-- Keep it to at most 12 rows.
-- If the question is not about maths, answer it in notes.
-
-The person may have hand-drawn strokes on the graph. They come as lists of (x, y) points in graph coordinates, in drawing order. Read them as a sketch: the shape of a curve, a region, a point or an arrow the question refers to. When the question asks what a drawing is, fit it with the simplest expression that matches its shape.
-
-The question may have been typed into a maths field, so words can run together without spaces and may appear as LaTeX.`;
+const MAX_REFERENCES = 5 * 1000 * 1000; // bytes of reference files, as worker/index.js caps them
 
 const SCHEMA = {
   type: 'object',
@@ -51,7 +38,44 @@ const SCHEMA = {
 const reply = (body, status) => new Response(body, { status, headers: CORS });
 const json = (data, status) => new Response(JSON.stringify(data), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-export async function handle(request, client) {
+// The reference files saved from the panel, kept by the gridline-settings worker in the
+// same KV namespace. Asking still works without them if the store can't be read.
+// Each file is at ref:<id> with {name, kind, mediaType, size} as metadata; ids sort in upload order.
+export async function loadReferences(env) {
+  try {
+    const keys = [];
+    let cursor;
+    do {
+      const page = await env.SETTINGS.list({ prefix: 'ref:', cursor });
+      keys.push(...page.keys.filter(k => k.metadata));
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
+    // the settings worker caps uploads at 5 MB, but overlapping uploads can pass it together,
+    // so stop here too: every question holds all of these in memory
+    let total = 0;
+    const wanted = keys.filter(k => {
+      const size = k.metadata.size || 0;
+      if (total + size > MAX_REFERENCES) return false;
+      total += size;
+      return true;
+    });
+    const files = await Promise.all(wanted.map(async k => ({ ...k.metadata, data: await env.SETTINGS.get(k.name) })));
+    return files.filter(f => f.data); // a file removed since the list was read
+  } catch (e) { console.error('Could not read reference files', e); return []; }
+}
+
+// Reference files as content blocks. The last one carries the cache breakpoint, so repeat
+// questions read the files from the cache.
+function referenceBlocks(references) {
+  const blocks = references.map(r =>
+    r.kind === 'pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: r.data } }
+    : r.kind === 'text' ? { type: 'document', source: { type: 'text', media_type: 'text/plain', data: r.data } }
+    : { type: 'image', source: { type: 'base64', media_type: r.mediaType, data: r.data } });
+  if (blocks.length) blocks[blocks.length - 1].cache_control = { type: 'ephemeral' };
+  return blocks;
+}
+
+export async function handle(request, client, references = []) {
   const { pathname } = new URL(request.url);
   if (request.method === 'OPTIONS') return reply(null, 204);
   if (pathname !== '/ask') return reply('Not found', 404);
@@ -72,6 +96,8 @@ export async function handle(request, client) {
   const prompt = (context.length ? 'Rows already in the calculator:\n' + context.join('\n') + '\n\n' : '')
     + (drawing ? 'Strokes the person drew on the graph:\n' + drawing + '\n\n' : '')
     + 'Question:\n' + question;
+  const refs = referenceBlocks(references);
+  const content = refs.length ? [...refs, { type: 'text', text: prompt }] : prompt;
 
   let message;
   try {
@@ -80,12 +106,15 @@ export async function handle(request, client) {
       max_tokens: 16000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
-      system: SYSTEM,
+      system: refs.length ? SYSTEM + '\n\n' + REFERENCE_RULES : SYSTEM,
       output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content }]
     }, { signal: AbortSignal.timeout(DEADLINE_MS) }); // one deadline across the SDK's retries
   } catch (e) {
     console.error(e);
+    // a file the API can't read (damaged, or too long) would otherwise fail every question
+    // with no hint; the files are the likely cause, but the API's reason isn't parsed
+    if (refs.length && e.status === 400) return json({ error: 'Claude could not answer with the reference files attached. If this keeps happening, one may be damaged or too long: remove it in the settings panel (Ctrl+Shift+`).' }, 502);
     return json({ error: 'Claude could not answer right now. Try again in a moment.' }, 502);
   }
   if (message.stop_reason === 'refusal') return json({ error: 'Claude declined to answer that.' }, 502);
@@ -101,7 +130,8 @@ export async function handle(request, client) {
 }
 
 export default {
-  fetch(request, env) {
-    return handle(request, new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }));
+  async fetch(request, env) {
+    const references = new URL(request.url).pathname === '/ask' && request.method === 'POST' ? await loadReferences(env) : [];
+    return handle(request, new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }), references);
   }
 };
