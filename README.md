@@ -21,7 +21,11 @@ Ctrl+Shift+` opens the Appearance panel, which sets the top bar's colours, logo,
 
 Type a question into any row and press Shift+Enter. The row disappears to show the question was sent, and a moment later Claude's answer appears in its place, step by step: expressions you can see and graph, with short notes between them. There is no waiting indicator. If the request fails, the question comes back so you can try again.
 
+To draw for Claude, point at the graph and tap Z. The cursor becomes a crosshair, and dragging draws instead of panning, with a mouse or a touchpad. Tap Z again or press Esc to stop. Your next question sends the drawing to Claude as points on the graph, then the drawing clears and drawing turns off. With a mouse you can also hold Z while you drag; letting go of Z ends it. If you type a letter before drawing anything, the z is typed after all and drawing turns off, so a word like "zero" typed with the pointer resting on the graph comes out whole. A double z ("puzzle") typed that way loses its z's; move the pointer off the graph to type it.
+
 Questions go to a second Cloudflare Worker (`claude/worker.js`, deployed as `gridline-claude`), which asks Claude Opus 5.5 through the Claude API. It runs entirely in the cloud; nothing needs to be running on anyone's computer. Asking is open to anyone who has the page, and each question is billed to the API key stored as the worker's `ANTHROPIC_API_KEY` secret. Set the key with `npx wrangler secret put ANTHROPIC_API_KEY` and deploy with `npx wrangler deploy`, both from `claude/`.
+
+The Appearance panel also holds **reference material for Ask Claude**: PDFs, text files and images that show the methods you teach. Claude reads them with every question and uses them to choose how to solve it, but never mentions them in its answer. They are shared by every device (up to 5 MB in all, since every question sends them all), stored one per key by the `gridline-settings` worker, and read from the same Cloudflare KV namespace by `gridline-claude`. A new or removed file can take up to a minute to reach Ask Claude.
 
 Install dependencies with `npm install` before running the tests or deploying.
 

@@ -3,7 +3,9 @@ const assert = require('node:assert');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
-const load = () => import(pathToFileURL(path.join(__dirname, '..', 'claude', 'worker.js')).href);
+const fakeKV = require('./kv.js');
+const mod = f => import(pathToFileURL(path.join(__dirname, '..', 'claude', f)).href);
+const load = async () => ({ ...await mod('worker.js'), ...await mod('prompt.js') });
 const askReq = body => new Request('https://example.test/ask', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) });
 // Stands in for the Anthropic SDK client at the network boundary.
 const fakeClient = reply => {
@@ -105,6 +107,79 @@ test('ask passes on every row, including a long table', async () => {
   const prompt = client.calls[0].messages[0].content;
   assert.match(prompt, /a_\{149\}=149/);
   assert.match(prompt, /\["1999","3996001"\]/);
+});
+
+test('ask puts the reference files before the question, cached, and tells Claude to use them silently', async () => {
+  const { handle, SYSTEM } = await load();
+  const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));
+  const references = [
+    { id: '1', name: 'unit 3.pdf', kind: 'pdf', mediaType: 'application/pdf', data: 'JVBERi0=' },
+    { id: '2', name: 'method.txt', kind: 'text', mediaType: 'text/plain', data: 'Always complete the square.' },
+    { id: '3', name: 'board.png', kind: 'image', mediaType: 'image/png', data: 'iVBORw0=' }
+  ];
+  const res = await handle(askReq({ question: 'solve x^2+6x+5=0' }), client, references);
+  assert.strictEqual(res.status, 200);
+  const content = client.calls[0].messages[0].content;
+  assert.deepStrictEqual(content[0], { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'JVBERi0=' } });
+  assert.deepStrictEqual(content[1], { type: 'document', source: { type: 'text', media_type: 'text/plain', data: 'Always complete the square.' } });
+  assert.deepStrictEqual(content[2], { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0=' }, cache_control: { type: 'ephemeral' } });
+  assert.strictEqual(content.length, 4);
+  assert.strictEqual(content[3].type, 'text');
+  assert.match(content[3].text, /solve x\^2\+6x\+5=0/);
+  const system = client.calls[0].system;
+  assert.ok(system.startsWith(SYSTEM));
+  assert.match(system, /reference material/i);
+  assert.match(system, /never mention/i);
+});
+
+test('with no reference files, the request is what it was before', async () => {
+  const { handle, SYSTEM } = await load();
+  const client = fakeClient(answer([{ type: 'expression', content: 'a=1' }]));
+  await handle(askReq({ question: 'q' }), client, []);
+  assert.strictEqual(client.calls[0].system, SYSTEM);
+  assert.doesNotMatch(SYSTEM, /reference/i);
+  assert.strictEqual(typeof client.calls[0].messages[0].content, 'string');
+});
+
+test('Ask Claude loads no more than 5 MB of files, whatever the store holds', async () => {
+  const { loadReferences } = await load();
+  const kv = fakeKV();
+  const three = 'x'.repeat(3 * 1000 * 1000);
+  // as if two uploads overlapped and both passed the cap
+  await kv.put('ref:a', three, { metadata: { name: 'a.pdf', kind: 'pdf', mediaType: 'application/pdf', size: three.length } });
+  await kv.put('ref:b', three, { metadata: { name: 'b.pdf', kind: 'pdf', mediaType: 'application/pdf', size: three.length } });
+  await kv.put('ref:c', 'small', { metadata: { name: 'c.txt', kind: 'text', mediaType: 'text/plain', size: 5 } });
+  assert.deepStrictEqual((await loadReferences({ SETTINGS: kv })).map(r => r.name), ['a.pdf', 'c.txt']);
+});
+
+test('ask points at the reference files when the API turns the request away', async () => {
+  const { handle } = await load();
+  const bad = Object.assign(new Error('Could not process PDF'), { status: 400 });
+  const refs = [{ id: '1', name: 'broken.pdf', kind: 'pdf', mediaType: 'application/pdf', data: 'xx' }];
+  let res = await handle(askReq({ question: 'q' }), fakeClient(bad), refs);
+  assert.strictEqual(res.status, 502);
+  assert.match((await res.json()).error, /reference file/i);
+  res = await handle(askReq({ question: 'q' }), fakeClient(bad), []);
+  assert.doesNotMatch((await res.json()).error, /reference/i);
+});
+
+test('the worker reads the files the settings worker stored, in upload order', async () => {
+  const { loadReferences } = await load();
+  const settings = (await import(pathToFileURL(path.join(__dirname, '..', 'worker', 'index.js')).href)).default;
+  const env = { SETTINGS: fakeKV() };
+  const up = body => settings.fetch(new Request('https://example.test/references', { method: 'POST', body: JSON.stringify(body) }), env);
+  await up({ name: 'm.txt', kind: 'text', mediaType: 'text/plain', data: 'Use substitution.' });
+  await up({ name: 'b.png', kind: 'image', mediaType: 'image/png', data: 'iVBORw0=' });
+  const refs = await loadReferences(env);
+  assert.deepStrictEqual(refs.map(r => [r.name, r.kind, r.mediaType, r.data]), [
+    ['m.txt', 'text', 'text/plain', 'Use substitution.'],
+    ['b.png', 'image', 'image/png', 'iVBORw0=']
+  ]);
+  // many uploads in the same millisecond still list in order
+  for (let i = 0; i < 30; i++) await up({ name: 'n' + i + '.txt', kind: 'text', mediaType: 'text/plain', data: 'x' });
+  assert.deepStrictEqual((await loadReferences(env)).slice(2).map(r => r.name), Array.from({ length: 30 }, (_, i) => 'n' + i + '.txt'));
+  assert.deepStrictEqual(await loadReferences({ SETTINGS: fakeKV() }), []);
+  assert.deepStrictEqual(await loadReferences({ SETTINGS: { list: async () => { throw new Error('down'); } } }), []);
 });
 
 test('ask says when the rows are too much to send', async () => {

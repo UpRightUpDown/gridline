@@ -146,16 +146,12 @@
       if (info.x) setSliderValue(info.xItem, info.x, x);
       if (info.y) setSliderValue(info.yItem, info.y, y);
     },
-    onSketchStart() { heldZ = null; } // the Z press was for drawing, not typing
+    onSketchStart() { drawKey.sketchStart(); }
   });
-  // Hold Z over the graph and drag to draw. The strokes go to Claude with the next question.
-  // A Z pressed over the graph is held back: if no drawing starts, it is typed after all,
-  // when Z comes up or just before the next key.
-  let heldZ = null; // { key, target }
-  let zDown = false; // a Z pressed over the graph is still down
-  function typeHeldZ() {
-    const z = heldZ; heldZ = null;
-    if (!z || document.activeElement !== z.target) return;
+  // Draw on the graph for Claude: see js/drawkey.js. The strokes go with the next question.
+  const drawKey = window.GDrawKey.createDrawKey(on => graph.setDrawKey(on));
+  function typeHeldZ(z) {
+    if (document.activeElement !== z.target) return;
     const field = z.target.closest && z.target.closest('.mq-field');
     if (field) { const mq = MQ(field); if (mq) mq.typedText(z.key); return; }
     if (z.target.setRangeText && typeof z.target.selectionStart === 'number') {
@@ -164,38 +160,13 @@
     }
   }
   window.addEventListener('keydown', e => {
-    const plainZ = e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
-    // Z held over the graph + Backspace or Delete erases every stroke; drawing carries on
-    if (zDown && (e.key === 'Backspace' || e.key === 'Delete')) {
-      e.preventDefault(); e.stopPropagation();
-      heldZ = null; // the Z was for the canvas, not for typing
-      graph.takeSketches();
-      return;
-    }
-    if (!plainZ) {
-      if (/^(Shift|Control|Alt|Meta|CapsLock)$/.test(e.key) || !heldZ) return;
-      // another key while Z is down means typing: put the z in first, and stop drawing
-      typeHeldZ();
-      graph.setDrawKey(false);
-      return;
-    }
-    if (e.repeat) {
-      if (zDown) { e.preventDefault(); e.stopPropagation(); } // no row of z's
-      return;
-    }
-    if (!graph.hovering) return;
-    e.preventDefault(); e.stopPropagation();
-    heldZ = { key: e.key, target: document.activeElement };
-    zDown = true;
-    graph.setDrawKey(true);
+    const r = drawKey.keydown(e, graph.hovering, document.activeElement);
+    if (r.typeHeld) typeHeldZ(r.typeHeld);
+    if (r.erase) graph.takeSketches();
+    if (r.swallow) { e.preventDefault(); e.stopPropagation(); }
   }, true);
-  window.addEventListener('keyup', e => {
-    if (e.key.toLowerCase() !== 'z' || !zDown) return;
-    typeHeldZ();
-    zDown = false;
-    graph.setDrawKey(false);
-  });
-  window.addEventListener('blur', () => { heldZ = null; zDown = false; graph.setDrawKey(false); });
+  window.addEventListener('keyup', e => drawKey.keyup(e));
+  window.addEventListener('blur', () => drawKey.blur());
   graph.setSettings(state.settings);
   GM.settings.degrees = !!state.settings.degrees;
 
@@ -640,6 +611,7 @@
     refresh();
     const context = window.GAsk.describeItems(savedItems());
     const sketches = graph.takeSketches();
+    drawKey.stop();
     window.GAsk.ask(question, context, null, sketches).then(steps => {
       const at = indexOf(wait.id);
       if (at < 0) return; // the placeholder was undone away, so the answer is no longer wanted
