@@ -165,6 +165,13 @@
   }
   window.addEventListener('keydown', e => {
     const plainZ = e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
+    // Z held over the graph + Backspace or Delete erases every stroke; drawing carries on
+    if (zDown && (e.key === 'Backspace' || e.key === 'Delete')) {
+      e.preventDefault(); e.stopPropagation();
+      heldZ = null; // the Z was for the canvas, not for typing
+      graph.takeSketches();
+      return;
+    }
     if (!plainZ) {
       if (/^(Shift|Control|Alt|Meta|CapsLock)$/.test(e.key) || !heldZ) return;
       // another key while Z is down means typing: put the z in first, and stop drawing
