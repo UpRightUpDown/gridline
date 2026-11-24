@@ -4,7 +4,8 @@
  * mouse also works, and turns off when Z comes up.
  * The Z that turned drawing on is held back. If a key that types a character comes before
  * any stroke, the user was typing, so the z is handed back to be typed and drawing turns off.
- * Other keys, like Enter or the arrows, drop the held z. */
+ * Other keys, like Enter or the arrows, drop the held z.
+ * Z held with Backspace or Delete erases the strokes, and drawing carries on. */
 (function (root) {
   'use strict';
 
@@ -21,6 +22,12 @@
       // Returns whether the key should be kept from the page, and any z to type first.
       keydown(e, hovering, target) {
         if (e.key === 'Escape' && on) { stop(); return { swallow: false }; }
+        // Z held + Backspace or Delete erases the strokes, and drawing carries on
+        if (zDown && (e.key === 'Backspace' || e.key === 'Delete')) {
+          held = null; // the Z was for the graph, not for typing
+          if (offOnRelease) { offOnRelease = false; drew = false; } // tap mode: stay on after Z comes up
+          return { swallow: true, erase: true };
+        }
         const plainZ = String(e.key).toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey;
         if (!plainZ) {
           if (!held || drew || String(e.key).length !== 1) {

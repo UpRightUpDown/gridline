@@ -162,6 +162,7 @@
   window.addEventListener('keydown', e => {
     const r = drawKey.keydown(e, graph.hovering, document.activeElement);
     if (r.typeHeld) typeHeldZ(r.typeHeld);
+    if (r.erase) graph.takeSketches();
     if (r.swallow) { e.preventDefault(); e.stopPropagation(); }
   }, true);
   window.addEventListener('keyup', e => drawKey.keyup(e));

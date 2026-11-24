@@ -102,3 +102,37 @@ test('keys that type nothing, like Enter or an arrow, drop the held z instead of
   assert.deepStrictEqual(e.keydown({ key: 'ArrowLeft' }, over), { swallow: false });
   assert.deepStrictEqual(e.keydown({ key: 'x' }, over), { swallow: false }, 'the z is gone for good');
 });
+
+test('Z held with Backspace or Delete erases the strokes, and the key is kept from the page', () => {
+  const d = createDrawKey();
+  d.keydown(Z, over);
+  d.sketchStart();
+  assert.deepStrictEqual(d.keydown({ key: 'Backspace' }, over), { swallow: true, erase: true });
+  assert.deepStrictEqual(d.keydown({ key: 'Delete' }, over), { swallow: true, erase: true });
+  assert.strictEqual(d.on, true, 'drawing carries on while Z is held');
+  d.keyup(Z);
+  assert.strictEqual(d.on, false, 'letting go after drawing still ends it');
+});
+
+test('Backspace after a held Z erases instead of typing the z', () => {
+  const d = createDrawKey();
+  d.keydown(Z, over, 'field');
+  d.keydown({ key: 'Backspace' }, over);
+  assert.deepStrictEqual(d.keydown({ key: 'a' }, over), { swallow: false }, 'the z is not handed back');
+});
+
+test('in tap mode, Z + Backspace erases and drawing stays on', () => {
+  const d = createDrawKey();
+  d.keydown(Z, over); d.keyup(Z);
+  d.sketchStart();
+  d.keydown(Z, over);
+  assert.deepStrictEqual(d.keydown({ key: 'Backspace' }, over), { swallow: true, erase: true });
+  d.keyup(Z);
+  assert.strictEqual(d.on, true);
+});
+
+test('Backspace without Z held is left alone', () => {
+  const d = createDrawKey();
+  d.keydown(Z, over); d.keyup(Z);
+  assert.deepStrictEqual(d.keydown({ key: 'Backspace' }, over), { swallow: false });
+});
